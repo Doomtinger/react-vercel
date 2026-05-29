@@ -11,9 +11,38 @@ export async function POST(req: Request) {
     console.log('=== Direct GLM API Call ===');
     console.log('Messages:', messages);
 
+    // Transform messages to handle image content
+    const transformedMessages = messages.map((msg: any) => {
+      if (Array.isArray(msg.content)) {
+        // Handle multimodal content (text + images)
+        const hasImage = msg.content.some((item: any) => item.type === 'image_url');
+        if (hasImage) {
+          // Use vision model for images
+          return {
+            role: msg.role,
+            content: msg.content.map((item: any) => {
+              if (item.type === 'image_url') {
+                return {
+                  type: 'image_url',
+                  image_url: { url: item.image_url.url }
+                };
+              }
+              return item;
+            })
+          };
+        }
+      }
+      return msg;
+    });
+
+    // Determine if we need vision model
+    const hasImages = messages.some((msg: any) =>
+      Array.isArray(msg.content) && msg.content.some((item: any) => item.type === 'image_url')
+    );
+
     const response = await zhipuai.chat.completions.create({
-      model: 'glm-4-flash',
-      messages: messages,
+      model: hasImages ? 'glm-4v' : 'glm-4-flash',
+      messages: transformedMessages,
       stream: true,
     });
 

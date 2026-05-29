@@ -37,6 +37,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  images?: string[];
 }
 
 export default function ChatPage() {
@@ -45,6 +46,8 @@ export default function ChatPage() {
   const [glmMessages, setGlmMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const { messages: chatMessages, sendMessage, status, error } = useChat();
@@ -62,7 +65,7 @@ export default function ChatPage() {
     }
   }, [error]);
 
-  const handleSubmitGLM = useCallback(async (userInput: string) => {
+  const handleSubmitGLM = useCallback(async (userInput: string, images?: string[]) => {
     if (isLoading) return;
 
     setIsLoading(true);
@@ -71,6 +74,7 @@ export default function ChatPage() {
       id: Date.now().toString(),
       role: 'user',
       content: userInput,
+      images: images,
     };
 
     setGlmMessages(prev => [...prev, userMessage]);
@@ -78,11 +82,23 @@ export default function ChatPage() {
     try {
       abortControllerRef.current = new AbortController();
 
+      // Build message content with images
+      let messageContent: any = userInput;
+      if (images && images.length > 0) {
+        messageContent = [
+          { type: 'text', text: userInput },
+          ...images.map(img => ({
+            type: 'image_url',
+            image_url: { url: img }
+          }))
+        ];
+      }
+
       const response = await fetch('/api/glm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: userInput }],
+          messages: [{ role: 'user', content: messageContent }],
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -152,19 +168,33 @@ export default function ChatPage() {
   const handleSubmit = useCallback(
     (e: React.SubmitEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (!input.trim() || isLoading || isChatLoading) return;
+      if ((!input.trim() && selectedImages.length === 0) || isLoading || isChatLoading) return;
 
       if (selectedModel.startsWith('glm')) {
-        handleSubmitGLM(input);
+        handleSubmitGLM(input, selectedImages);
       } else {
+        // Convert images to FileUIPart format for AI SDK
+        const fileParts: Array<{ url: string; type: 'file'; mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }> = selectedImages.map((dataUrl) => {
+          const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+          return {
+            url: dataUrl,
+            type: 'file' as const,
+            mediaType: mimeString as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          };
+        });
+
         sendMessage(
-          { text: input },
+          {
+            text: input,
+            files: fileParts.length > 0 ? fileParts : undefined
+          },
           { body: { model: selectedModel } }
         );
       }
       setInput('');
+      setSelectedImages([]);
     },
-    [input, isLoading, isChatLoading, selectedModel, sendMessage, handleSubmitGLM]
+    [input, selectedImages, isLoading, isChatLoading, selectedModel, sendMessage, handleSubmitGLM]
   );
 
   const handleStop = useCallback(() => {
@@ -184,6 +214,28 @@ export default function ChatPage() {
         .join('');
     }
     return '';
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newImages: string[] = [];
+    Array.from(files).forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setSelectedImages(prev => [...prev, e.target!.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleExampleClick = (example: string) => {
@@ -305,6 +357,34 @@ export default function ChatPage() {
                       ? 'bg-blue-500 text-white'
                       : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
                   }`}>
+                    {/* Images - for custom Message type */}
+                    {'images' in message && message.images && message.images.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {message.images.map((image: string, imgIndex: number) => (
+                          <img
+                            key={imgIndex}
+                            src={image}
+                            alt={`Message image ${imgIndex + 1}`}
+                            className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {/* Images - for AI SDK UIMessage type with file parts */}
+                    {'parts' in message && message.parts && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {message.parts
+                          .filter((part: any) => part.type === 'file' && part.url)
+                          .map((part: any, imgIndex: number) => (
+                            <img
+                              key={imgIndex}
+                              src={part.url}
+                              alt={`Message image ${imgIndex + 1}`}
+                              className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
+                            />
+                          ))}
+                      </div>
+                    )}
                     <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
                       {getMessageText(message)}
                     </p>
@@ -337,8 +417,52 @@ export default function ChatPage() {
       {/* Input Area */}
       <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <div className="max-w-3xl mx-auto p-4">
+          {/* Image Preview */}
+          {selectedImages.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {selectedImages.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={image}
+                    alt={`Preview ${index + 1}`}
+                    className="w-20 h-20 object-cover rounded-lg border border-zinc-200 dark:border-zinc-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-end gap-2 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors"
+                title="上传图片"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

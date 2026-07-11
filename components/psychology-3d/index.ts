@@ -6,3 +6,15 @@ export {
   StressVisualization,
   TimePerception,
 } from './Visualizations';
+export {
+  EmotionVisualizationScene,
+  EmotionCore,
+  EmotionParticles,
+  EmotionTrail,
+  FlowField,
+} from './EmotionVisualizationFixed';
+export {
+  SimpleEmotionScene,
+  SimpleEmotionCore,
+  SimpleParticles,
+} from './SimpleEmotionScene';

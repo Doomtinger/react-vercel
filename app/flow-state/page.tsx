@@ -101,6 +101,24 @@ export default function FlowStatePage() {
         <div className="mb-6 p-4 rounded-xl bg-white/10 border border-white/20">
           <h3 className="text-sm font-semibold text-white mb-3">摄像头控制</h3>
 
+          {/* video元素 - 始终在DOM中，通过visibility控制显示 */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full object-cover"
+            style={{
+              transform: 'scaleX(-1)',
+              visibility: isStreaming ? 'visible' : 'hidden',
+              height: isStreaming ? '240px' : '0',
+              borderRadius: '8px'
+            }}
+            onLoadedMetadata={() => console.log('✅ Flow-state: 视频元数据已加载', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight)}
+            onPlay={() => console.log('✅ Flow-state: 视频开始播放')}
+            onError={(e) => console.error('❌ Flow-state: 视频错误', (e.target as HTMLVideoElement).error)}
+          />
+
           {!isStreaming && (
             <div className="text-center py-8">
               <div className="text-4xl mb-3">📷</div>
@@ -113,30 +131,22 @@ export default function FlowStatePage() {
               >
                 启动摄像头
               </button>
+              <div className="mt-4 text-xs text-gray-500 text-left">
+                <p>💡 提示：如果摄像头无法启动，请检查：</p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>浏览器是否允许了摄像头权限</li>
+                  <li>其他应用是否正在使用摄像头</li>
+                  <li>系统摄像头设置是否正常</li>
+                </ul>
+              </div>
             </div>
           )}
 
           {isStreaming && (
             <div className="space-y-3">
-              {/* 摄像头预览 */}
-              <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ minHeight: '192px' }}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-48 object-cover"
-                  style={{
-                    transform: 'scaleX(-1)',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-                  onLoadedMetadata={() => console.log('视频元数据已加载')}
-                  onCanPlay={() => console.log('视频可以播放')}
-                  onError={(e) => console.error('视频错误:', e)}
-                />
-                <div className="absolute top-2 right-2 flex gap-2">
+              {/* LIVE 标签 */}
+              <div className="relative flex justify-end -mt-10 mb-2 pr-2">
+                <div className="flex gap-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                   <span className="text-xs text-white bg-black/50 px-2 py-1 rounded">
                     LIVE

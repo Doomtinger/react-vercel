@@ -50,7 +50,7 @@ export function useFaceDetection(config: FaceDetectionConfig = {}) {
   // 启动摄像头
   const startCamera = useCallback(async () => {
     try {
-      console.log('正在启动摄像头...');
+      console.log('🎬 Flow-state: 正在启动摄像头...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: videoWidth },
@@ -60,31 +60,71 @@ export function useFaceDetection(config: FaceDetectionConfig = {}) {
         audio: false,
       });
 
+      console.log('✅ Flow-state: 摄像头流获取成功，tracks:', stream.getVideoTracks().length);
       streamRef.current = stream;
 
       if (videoRef.current) {
+        console.log('📹 Flow-state: videoRef.current 存在');
+
+        // 先停止任何现有的流
+        if (videoRef.current.srcObject) {
+          const oldStream = videoRef.current.srcObject as MediaStream;
+          oldStream.getTracks().forEach(track => track.stop());
+        }
+
         videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.autoplay = true;
+
+        console.log('📝 Flow-state: 设置视频属性完成');
 
         // 等待视频元数据加载
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            console.error('❌ Flow-state: 视频加载超时');
+            reject(new Error('视频加载超时'));
+          }, 10000);
+
           videoRef.current!.onloadedmetadata = () => {
-            console.log('视频元数据已加载，尺寸:', videoRef.current!.videoWidth, 'x', videoRef.current!.videoHeight);
-            resolve(true);
+            clearTimeout(timeoutId);
+            console.log('✅ Flow-state: 视频元数据已加载');
+            console.log('📐 Flow-state: 视频尺寸:', videoRef.current!.videoWidth, 'x', videoRef.current!.videoHeight);
+            console.log('📊 Flow-state: ReadyState:', videoRef.current!.readyState);
+            resolve();
           };
-          videoRef.current!.onerror = (e) => {
-            console.error('视频加载错误:', e);
-            reject(e);
+
+          videoRef.current!.onerror = (e: string | Event) => {
+            clearTimeout(timeoutId);
+            console.error('❌ Flow-state: 视频元素错误:', e);
+            if (typeof e === 'object' && e.target) {
+              const target = e.target as HTMLVideoElement;
+              const error = target.error;
+              if (error) {
+                console.error('❌ Flow-state: Error code:', error.code, 'message:', error.message);
+              }
+            }
+            reject(new Error('视频元素错误'));
           };
-          // 超时处理
-          setTimeout(() => reject(new Error('视频加载超时')), 5000);
         });
 
-        await videoRef.current.play();
-        console.log('视频开始播放');
+        // 尝试播放
+        try {
+          await videoRef.current.play();
+          console.log('✅ Flow-state: 视频播放成功');
+          console.log('⏱️ Flow-state: 当前时间:', videoRef.current.currentTime);
+          console.log('🎥 Flow-state: paused:', videoRef.current.paused, 'ended:', videoRef.current.ended);
+        } catch (playError) {
+          console.error('❌ Flow-state: 视频播放失败:', playError);
+          throw playError;
+        }
+      } else {
+        console.error('❌ Flow-state: videoRef.current 不存在');
       }
 
       setIsStreaming(true);
       setError(null);
+      console.log('🎉 Flow-state: 摄像头启动完成，设置 isStreaming = true');
 
       // 开始情感检测循环
       startEmotionDetection();
@@ -92,7 +132,7 @@ export function useFaceDetection(config: FaceDetectionConfig = {}) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '无法访问摄像头';
       setError(errorMessage);
-      console.error('摄像头启动失败:', err);
+      console.error('❌❌ Flow-state: 摄像头启动失败:', err);
     }
   }, [videoWidth, videoHeight]);
 

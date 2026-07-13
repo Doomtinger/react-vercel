@@ -266,15 +266,15 @@ export function useFaceDetection(config: FaceDetectionConfig = {}) {
   };
 }
 
-// 情感颜色映射
+// 情感颜色映射 - 基于色彩心理学体系
 export const emotionColors: Record<EmotionType, string> = {
-  neutral: '#9CA3AF',      // 灰色
-  happy: '#FCD34D',        // 金黄色
-  sad: '#60A5FA',          // 蓝色
-  angry: '#EF4444',        // 红色
-  fearful: '#A78BFA',      // 紫色
-  disgusted: '#10B981',    // 绿色
-  surprised: '#F97316',    // 橙色
+  neutral: '#F5F5F5',      // 奶白色 - 平静、无情绪、纯粹
+  happy: '#FFD700',        // 亮金黄色 - 开心、温暖、释然
+  sad: '#1E3A8A',          // 深蓝色 - 悲伤、低落、心事沉重
+  angry: '#DC143C',        // 暴怒红 - 愤怒、攻击性、激动
+  fearful: '#6B5B7F',      // 灰紫色 - 恐惧、焦虑、敏感
+  disgusted: '#4A5D4A',    // 灰浊绿 - 厌恶、麻木、封闭
+  surprised: '#FF8C00',     // 亮橙色 - 激动、亢奋、急躁
 };
 
 // 情感emoji映射
@@ -297,4 +297,91 @@ export const emotionDescriptions: Record<EmotionType, string> = {
   fearful: '恐惧害怕',
   disgusted: '厌恶反感',
   surprised: '惊讶意外',
+};
+
+// 复合情感色彩系统
+export interface EmotionColorProfile {
+  primary: string;      // 主色调
+  secondary: string;    // 次要色
+  accent: string;       // 强调色
+  gradient: string[];   // 渐变色组
+  glow: string;         // 发光色
+  saturation: number;   // 饱和度 0-1
+  lightness: number;    // 明度 0-1
+}
+
+// 详细的情感色彩配置
+export const emotionColorProfiles: Record<EmotionType, EmotionColorProfile> = {
+  neutral: {
+    primary: '#F5F5F5',
+    secondary: '#E8E8E8',
+    accent: '#D0D0D0',
+    gradient: ['#FFFFFF', '#F5F5F5', '#EBEBEB'],
+    glow: '#FFFFFF',
+    saturation: 0.1,
+    lightness: 0.95,
+  },
+  happy: {
+    primary: '#FFD700',
+    secondary: '#FFA500',
+    accent: '#FFFF00',
+    gradient: ['#FFD700', '#FFA500', '#FFFF00', '#FFE135'],
+    glow: '#FFEC8B',
+    saturation: 0.9,
+    lightness: 0.7,
+  },
+  sad: {
+    primary: '#1E3A8A',
+    secondary: '#4A5D7A',
+    accent: '#2E4A7A',
+    gradient: ['#1E3A8A', '#4A5D7A', '#2E4A7A', '#38587A'],
+    glow: '#4A6A9A',
+    saturation: 0.4,
+    lightness: 0.3,
+  },
+  angry: {
+    primary: '#DC143C',
+    secondary: '#8B0000',
+    accent: '#FF0000',
+    gradient: ['#DC143C', '#8B0000', '#FF0000', '#B22222'],
+    glow: '#FF4444',
+    saturation: 1.0,
+    lightness: 0.4,
+  },
+  fearful: {
+    primary: '#6B5B7F',
+    secondary: '#5B4B6F',
+    accent: '#7B6B8F',
+    gradient: ['#6B5B7F', '#5B4B6F', '#7B6B8F', '#4B3B5F'],
+    glow: '#8B7B9F',
+    saturation: 0.3,
+    lightness: 0.4,
+  },
+  disgusted: {
+    primary: '#4A5D4A',
+    secondary: '#3A4D3A',
+    accent: '#5A6D5A',
+    gradient: ['#4A5D4A', '#3A4D3A', '#5A6D5A', '#2A3D2A'],
+    glow: '#6A7D6A',
+    saturation: 0.2,
+    lightness: 0.3,
+  },
+  surprised: {
+    primary: '#FF8C00',
+    secondary: '#FF6600',
+    accent: '#FFAA00',
+    gradient: ['#FF8C00', '#FF6600', '#FFAA00', '#FF7700'],
+    glow: '#FFAA33',
+    saturation: 0.95,
+    lightness: 0.5,
+  },
+};
+
+// 复合情感色彩组合
+export const compositeEmotionColors = {
+  sad_angry: ['#1E3A8A', '#8B0000'],        // 悲伤+愤怒：委屈憋屈
+  anxious_frustrated: ['#6B5B7F', '#FF8C00'], // 焦虑+浮躁：坐立不安
+  depressed_numb: ['#4A5D4A', '#2C2C2C'],    // 压抑+麻木：毫无情绪波动
+  healing_relaxed: ['#90EE90', '#FFD700'],    // 治愈+轻松：负面情绪缓解
+  inner_conflict: ['#6B5B7F', '#DC143C'],     // 内耗+愤怒：内心拉扯
 };

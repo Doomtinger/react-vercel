@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 
 // 动态导入3D组件，避免SSR问题
 const PsychologyScene = dynamic(
@@ -130,24 +132,50 @@ export default function Psychology3DPage() {
       <div className="flex-1 flex flex-col">
         {/* 3D Canvas */}
         <div className="flex-1 relative">
-          {selectedViz === 'emotion' && <PsychologyScene />}
+          {selectedViz === 'emotion' && (
+            <div className="w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900">
+              <PsychologyScene />
+            </div>
+          )}
           {selectedViz === 'flow' && (
-            <div className="w-full h-full">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center text-white">
-                  <div className="text-6xl mb-4">🌊</div>
-                  <h2 className="text-2xl font-bold mb-2">心流状态</h2>
-                  <p className="text-gray-300">感受专注与创造的流动</p>
-                </div>
-              </div>
+            <div className="w-full h-full bg-gradient-to-br from-blue-900 via-teal-900 to-green-900">
+              <Canvas camera={{ position: [0, 5, 10], fov: 60 }}>
+                <FlowStateVisualization />
+                <OrbitControls
+                  enableZoom={true}
+                  enablePan={true}
+                  enableRotate={true}
+                  zoomSpeed={0.6}
+                  panSpeed={0.5}
+                  rotateSpeed={0.4}
+                />
+                <ambientLight intensity={0.5} />
+                <pointLight position={[10, 10, 5]} intensity={0.8} color="#6BCB77" />
+                <pointLight position={[-10, -10, -5]} intensity={0.3} />
+              </Canvas>
             </div>
           )}
           {selectedViz === 'stress' && (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">⛰️</div>
-                <h2 className="text-2xl font-bold text-white mb-4">压力山脉</h2>
-                <div className="w-64">
+            <div className="w-full h-full relative">
+              <Canvas camera={{ position: [0, 8, 15], fov: 60 }}>
+                <StressVisualization level={stressLevel} />
+                <OrbitControls
+                  enableZoom={true}
+                  enablePan={true}
+                  enableRotate={true}
+                  zoomSpeed={0.6}
+                  panSpeed={0.5}
+                  rotateSpeed={0.4}
+                />
+                <ambientLight intensity={0.4} />
+                <pointLight position={[10, 10, 10]} intensity={0.6} />
+                <pointLight position={[-10, 5, -5]} intensity={0.4} />
+              </Canvas>
+
+              {/* 压力控制面板 */}
+              <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm p-4 rounded-xl">
+                <h3 className="text-white font-semibold mb-3">⛰️ 压力山脉</h3>
+                <div className="w-48">
                   <label className="text-white text-sm mb-2 block">压力水平</label>
                   <input
                     type="range"
@@ -159,18 +187,56 @@ export default function Psychology3DPage() {
                     className="w-full"
                   />
                   <p className="text-gray-300 text-xs mt-2">
-                    当前: {(stressLevel * 100).toFixed(0)}%
+                    当前: <span className={
+                      stressLevel > 0.7 ? 'text-red-400' :
+                      stressLevel > 0.4 ? 'text-yellow-400' :
+                      'text-green-400'
+                    }>{(stressLevel * 100).toFixed(0)}%</span>
+                  </p>
+                </div>
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-gray-400">
+                    {stressLevel > 0.7 ? '⚠️ 高压力 - 山脉变红，粒子躁动' :
+                     stressLevel > 0.4 ? '⚡ 中等压力 - 山脉橙黄，呼吸急促' :
+                     '😌 低压力 - 山脉翠绿，粒子平静'}
                   </p>
                 </div>
               </div>
             </div>
           )}
           {selectedViz === 'time' && (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center text-white">
-                <div className="text-6xl mb-4">⏰</div>
-                <h2 className="text-2xl font-bold mb-2">时间感知</h2>
-                <p className="text-gray-300">观察时间的相对性</p>
+            <div className="w-full h-full bg-gradient-to-br from-purple-900 via-pink-900 to-blue-900">
+              <Canvas camera={{ position: [0, 3, 12], fov: 60 }}>
+                <TimePerception />
+                <OrbitControls
+                  enableZoom={true}
+                  enablePan={true}
+                  enableRotate={true}
+                  zoomSpeed={0.6}
+                  panSpeed={0.5}
+                  rotateSpeed={0.4}
+                />
+                <ambientLight intensity={0.5} />
+                <pointLight position={[8, 5, 5]} intensity={0.7} color="#FFD700" />
+                <pointLight position={[-8, -5, -5]} intensity={0.4} color="#DC143C" />
+              </Canvas>
+
+              {/* 时间感知说明 */}
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm p-3 rounded-xl">
+                <div className="flex gap-8 text-center">
+                  <div>
+                    <div className="text-2xl mb-1">🌟 快乐时光</div>
+                    <p className="text-xs text-yellow-300">左侧 - 快速旋转 ⏩</p>
+                  </div>
+                  <div>
+                    <div className="text-2xl mb-1">⏰ 时间感知</div>
+                    <p className="text-xs text-purple-300">中心 - 相对体验</p>
+                  </div>
+                  <div>
+                    <div className="text-2xl mb-1">😰 压力时光</div>
+                    <p className="text-xs text-red-300">右侧 - 缓慢移动 ⏳</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

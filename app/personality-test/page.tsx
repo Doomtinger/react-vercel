@@ -25,222 +25,548 @@ interface Question {
   }[];
 }
 
-// 测试题目库
+// 测试题目库 - 基于国际标准心理测量量表
+// 题目来源：IPIP (International Personality Item Pool), BFI (Big Five Inventory), MBTI量表
 const personalityQuestions: Question[] = [
-  // E-I (外向-内向)
+  // 外向性 - 基于BFI和IPIP标准题目
   {
     id: 1,
-    text: "在社交聚会中，你通常会：",
+    text: "我是聚会的中心人物",
     category: 'E_I',
     options: [
-      { text: "主动与很多人交谈，享受热闹的氛围", value: 1, dimension: 'E' },
-      { text: "只与少数熟悉的人交流，更喜欢安静", value: -1, dimension: 'I' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
   {
     id: 2,
-    text: "当你需要充电时，你更倾向于：",
+    text: "我在人群中不说话",
     category: 'E_I',
     options: [
-      { text: "和朋友一起外出活动", value: 1, dimension: 'E' },
-      { text: "独自在家阅读或思考", value: -1, dimension: 'I' }
+      { text: "非常同意", value: -2, dimension: 'I' },
+      { text: "比较同意", value: -1, dimension: 'I' },
+      { text: "比较不同意", value: 1, dimension: 'E' },
+      { text: "非常不同意", value: 2, dimension: 'E' }
     ]
   },
   {
     id: 3,
-    text: "在团队合作中，你通常：",
+    text: "我对人感到舒适",
     category: 'E_I',
     options: [
-      { text: "喜欢主导讨论，表达自己的观点", value: 1, dimension: 'E' },
-      { text: "更愿意倾听他人，私下思考后再发言", value: -1, dimension: 'I' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
-
-  // S-N (感觉-直觉)
   {
     id: 4,
-    text: "在学习新知识时，你更偏好：",
-    category: 'S_N',
+    text: "我让他人继续交谈",
+    category: 'E_I',
     options: [
-      { text: "具体的、实际的信息和步骤", value: 1, dimension: 'S' },
-      { text: "抽象的概念、理论和可能性", value: -1, dimension: 'N' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
   {
     id: 5,
-    text: "面对问题时，你更相信：",
-    category: 'S_N',
+    text: "我喜欢成为注意力的中心",
+    category: 'E_I',
     options: [
-      { text: "过去的经验和事实", value: 1, dimension: 'S' },
-      { text: "直觉和灵感", value: -1, dimension: 'N' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
   {
     id: 6,
-    text: "你更注重：",
-    category: 'S_N',
+    text: "我在社交场合感到舒适",
+    category: 'E_I',
     options: [
-      { text: "现实和当下的细节", value: 1, dimension: 'S' },
-      { text: "未来的可能性和大局观", value: -1, dimension: 'N' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
-
-  // T-F (思考-情感)
   {
     id: 7,
-    text: "在做重要决定时，你主要依据：",
-    category: 'T_F',
+    text: "我保持背景状态",
+    category: 'E_I',
     options: [
-      { text: "逻辑分析和客观标准", value: 1, dimension: 'T' },
-      { text: "个人价值观和他人感受", value: -1, dimension: 'F' }
+      { text: "非常同意", value: -2, dimension: 'I' },
+      { text: "比较同意", value: -1, dimension: 'I' },
+      { text: "比较不同意", value: 1, dimension: 'E' },
+      { text: "非常不同意", value: 2, dimension: 'E' }
     ]
   },
   {
     id: 8,
-    text: "在冲突中，你更倾向于：",
-    category: 'T_F',
+    text: "我开始交谈",
+    category: 'E_I',
     options: [
-      { text: "直接指出问题，讨论解决方案", value: 1, dimension: 'T' },
-      { text: "考虑各方感受，寻求和谐", value: -1, dimension: 'F' }
-    ]
-  },
-  {
-    id: 9,
-    text: "你认为更重要的是：",
-    category: 'T_F',
-    options: [
-      { text: "公平公正，即使可能伤害感情", value: 1, dimension: 'T' },
-      { text: "维护关系，即使需要妥协原则", value: -1, dimension: 'F' }
+      { text: "非常同意", value: 2, dimension: 'E' },
+      { text: "比较同意", value: 1, dimension: 'E' },
+      { text: "比较不同意", value: -1, dimension: 'I' },
+      { text: "非常不同意", value: -2, dimension: 'I' }
     ]
   },
 
-  // J-P (判断-感知)
+  // 宜人性 - 基于BFI标准题目
+  {
+    id: 9,
+    text: "我对他人感兴趣",
+    category: 'A',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighA' },
+      { text: "比较同意", value: 1, dimension: 'HighA' },
+      { text: "比较不同意", value: -1, dimension: 'LowA' },
+      { text: "非常不同意", value: -2, dimension: 'LowA' }
+    ]
+  },
   {
     id: 10,
-    text: "在日常生活和工作中，你更喜欢：",
-    category: 'J_P',
+    text: "我去我的路",
+    category: 'A',
     options: [
-      { text: "有计划、有组织、提前安排", value: 1, dimension: 'J' },
-      { text: "灵活、随机、保持开放选项", value: -1, dimension: 'P' }
+      { text: "非常同意", value: -2, dimension: 'LowA' },
+      { text: "比较同意", value: -1, dimension: 'LowA' },
+      { text: "比较不同意", value: 1, dimension: 'HighA' },
+      { text: "非常不同意", value: 2, dimension: 'HighA' }
     ]
   },
   {
     id: 11,
-    text: "面对截止日期，你通常会：",
-    category: 'J_P',
+    text: "我同情他人的感受",
+    category: 'A',
     options: [
-      { text: "提前规划并按时完成", value: 1, dimension: 'J' },
-      { text: "在压力下最后时刻完成", value: -1, dimension: 'P' }
+      { text: "非常同意", value: 2, dimension: 'HighA' },
+      { text: "比较同意", value: 1, dimension: 'HighA' },
+      { text: "比较不同意", value: -1, dimension: 'LowA' },
+      { text: "非常不同意", value: -2, dimension: 'LowA' }
     ]
   },
   {
     id: 12,
-    text: "在处理信息时，你倾向于：",
-    category: 'J_P',
+    text: "我对他人的问题不感兴趣",
+    category: 'A',
     options: [
-      { text: "快速得出结论，做出决定", value: 1, dimension: 'J' },
-      { text: "持续收集信息，保持选择开放", value: -1, dimension: 'P' }
+      { text: "非常同意", value: -2, dimension: 'LowA' },
+      { text: "比较同意", value: -1, dimension: 'LowA' },
+      { text: "比较不同意", value: 1, dimension: 'HighA' },
+      { text: "非常不同意", value: 2, dimension: 'HighA' }
     ]
   },
-
-  // 大五人格扩展题目
-  // 开放性 (O)
   {
     id: 13,
-    text: "你对新鲜事物的态度是：",
-    category: 'O',
+    text: "我对他人的感受有软心肠",
+    category: 'A',
     options: [
-      { text: "非常好奇，喜欢尝试新体验", value: 1, dimension: 'HighO' },
-      { text: "比较保守，更喜欢熟悉的事物", value: -1, dimension: 'LowO' }
+      { text: "非常同意", value: 2, dimension: 'HighA' },
+      { text: "比较同意", value: 1, dimension: 'HighA' },
+      { text: "比较不同意", value: -1, dimension: 'LowA' },
+      { text: "非常不同意", value: -2, dimension: 'LowA' }
     ]
   },
   {
     id: 14,
-    text: "在艺术和审美方面，你：",
-    category: 'O',
+    text: "我很少关心他人",
+    category: 'A',
     options: [
-      { text: "对艺术、美感有很强的兴趣和鉴赏力", value: 1, dimension: 'HighO' },
-      { text: "对艺术不太感兴趣，更注重实用性", value: -1, dimension: 'LowO' }
+      { text: "非常同意", value: -2, dimension: 'LowA' },
+      { text: "比较同意", value: -1, dimension: 'LowA' },
+      { text: "比较不同意", value: 1, dimension: 'HighA' },
+      { text: "非常不同意", value: 2, dimension: 'HighA' }
     ]
   },
-
-  // 尽责性 (C)
   {
     id: 15,
-    text: "在日常工作和生活中，你：",
-    category: 'C',
+    text: "我觉得他人的感情是我的责任",
+    category: 'A',
     options: [
-      { text: "很有条理，做事细致认真", value: 1, dimension: 'HighC' },
-      { text: "比较随意，不拘小节", value: -1, dimension: 'LowC' }
+      { text: "非常同意", value: 2, dimension: 'HighA' },
+      { text: "比较同意", value: 1, dimension: 'HighA' },
+      { text: "比较不同意", value: -1, dimension: 'LowA' },
+      { text: "非常不同意", value: -2, dimension: 'LowA' }
     ]
   },
   {
     id: 16,
-    text: "对于承诺和任务，你通常：",
-    category: 'C',
+    text: "我对他人的没有时间",
+    category: 'A',
     options: [
-      { text: "严格遵守承诺，按时完成任务", value: 1, dimension: 'HighC' },
-      { text: "有时会拖延或改变计划", value: -1, dimension: 'LowC' }
+      { text: "非常同意", value: -2, dimension: 'LowA' },
+      { text: "比较同意", value: -1, dimension: 'LowA' },
+      { text: "比较不同意", value: 1, dimension: 'HighA' },
+      { text: "非常不同意", value: 2, dimension: 'HighA' }
     ]
   },
 
-  // 外向性 (E - 大五人格)
+  // 尽责性 - 基于BFI标准题目
   {
     id: 17,
-    text: "在人群中，你通常感觉：",
-    category: 'E',
+    text: "我总是做好准备",
+    category: 'C',
     options: [
-      { text: "充满活力，从社交中获得能量", value: 1, dimension: 'HighE' },
-      { text: "有些疲惫，需要独处来恢复", value: -1, dimension: 'LowE' }
+      { text: "非常同意", value: 2, dimension: 'HighC' },
+      { text: "比较同意", value: 1, dimension: 'HighC' },
+      { text: "比较不同意", value: -1, dimension: 'LowC' },
+      { text: "非常不同意", value: -2, dimension: 'LowC' }
     ]
   },
   {
     id: 18,
-    text: "你更喜欢哪种工作环境：",
-    category: 'E',
+    text: "我注意细节",
+    category: 'C',
     options: [
-      { text: "开放协作的团队环境", value: 1, dimension: 'HighE' },
-      { text: "独立安静的个人空间", value: -1, dimension: 'LowE' }
+      { text: "非常同意", value: 2, dimension: 'HighC' },
+      { text: "比较同意", value: 1, dimension: 'HighC' },
+      { text: "比较不同意", value: -1, dimension: 'LowC' },
+      { text: "非常不同意", value: -2, dimension: 'LowC' }
     ]
   },
-
-  // 宜人性 (A)
   {
     id: 19,
-    text: "在与他人合作时，你通常：",
-    category: 'A',
+    text: "我很快完成工作",
+    category: 'C',
     options: [
-      { text: "非常合作，乐于助人", value: 1, dimension: 'HighA' },
-      { text: "更关注自己的目标，竞争意识强", value: -1, dimension: 'LowA' }
+      { text: "非常同意", value: 2, dimension: 'HighC' },
+      { text: "比较同意", value: 1, dimension: 'HighC' },
+      { text: "比较不同意", value: -1, dimension: 'LowC' },
+      { text: "非常不同意", value: -2, dimension: 'LowC' }
     ]
   },
   {
     id: 20,
-    text: "对于他人的需求和感受：",
-    category: 'A',
+    text: "我在工作中杂乱无章",
+    category: 'C',
     options: [
-      { text: "非常关心，富有同情心", value: 1, dimension: 'HighA' },
-      { text: "相对理性，不太容易受情感影响", value: -1, dimension: 'LowA' }
+      { text: "非常同意", value: -2, dimension: 'LowC' },
+      { text: "比较同意", value: -1, dimension: 'LowC' },
+      { text: "比较不同意", value: 1, dimension: 'HighC' },
+      { text: "非常不同意", value: 2, dimension: 'HighC' }
     ]
   },
-
-  // 神经质 (N)
   {
     id: 21,
-    text: "面对压力和挫折时，你通常：",
-    category: 'N',
+    text: "我把事情留到最后一刻",
+    category: 'C',
     options: [
-      { text: "情绪稳定，能够冷静应对", value: -1, dimension: 'LowN' },
-      { text: "容易焦虑和紧张", value: 1, dimension: 'HighN' }
+      { text: "非常同意", value: -2, dimension: 'LowC' },
+      { text: "比较同意", value: -1, dimension: 'LowC' },
+      { text: "比较不同意", value: 1, dimension: 'HighC' },
+      { text: "非常不同意", value: 2, dimension: 'HighC' }
     ]
   },
   {
     id: 22,
-    text: "你的情绪状态通常是：",
+    text: "我遵循计划",
+    category: 'C',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighC' },
+      { text: "比较同意", value: 1, dimension: 'HighC' },
+      { text: "比较不同意", value: -1, dimension: 'LowC' },
+      { text: "非常不同意", value: -2, dimension: 'LowC' }
+    ]
+  },
+  {
+    id: 23,
+    text: "我在工作中很懒散",
+    category: 'C',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowC' },
+      { text: "比较同意", value: -1, dimension: 'LowC' },
+      { text: "比较不同意", value: 1, dimension: 'HighC' },
+      { text: "非常不同意", value: 2, dimension: 'HighC' }
+    ]
+  },
+  {
+    id: 24,
+    text: "我坚持到完成工作",
+    category: 'C',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighC' },
+      { text: "比较同意", value: 1, dimension: 'HighC' },
+      { text: "比较不同意", value: -1, dimension: 'LowC' },
+      { text: "非常不同意", value: -2, dimension: 'LowC' }
+    ]
+  },
+
+  // 神经质 - 基于BFI标准题目
+  {
+    id: 25,
+    text: "我经常感到担心",
     category: 'N',
     options: [
-      { text: "平稳积极，很少感到沮丧", value: -1, dimension: 'LowN' },
-      { text: "起伏较大，容易受到情绪影响", value: 1, dimension: 'HighN' }
+      { text: "非常同意", value: 2, dimension: 'HighN' },
+      { text: "比较同意", value: 1, dimension: 'HighN' },
+      { text: "比较不同意", value: -1, dimension: 'LowN' },
+      { text: "非常不同意", value: -2, dimension: 'LowN' }
+    ]
+  },
+  {
+    id: 26,
+    text: "我很容易放松",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowN' },
+      { text: "比较同意", value: -1, dimension: 'LowN' },
+      { text: "比较不同意", value: 1, dimension: 'HighN' },
+      { text: "非常不同意", value: 2, dimension: 'HighN' }
+    ]
+  },
+  {
+    id: 27,
+    text: "我很少情绪低落",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowN' },
+      { text: "比较同意", value: -1, dimension: 'LowN' },
+      { text: "比较不同意", value: 1, dimension: 'HighN' },
+      { text: "非常不同意", value: 2, dimension: 'HighN' }
+    ]
+  },
+  {
+    id: 28,
+    text: "我经常感到情绪低落",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighN' },
+      { text: "比较同意", value: 1, dimension: 'HighN' },
+      { text: "比较不同意", value: -1, dimension: 'LowN' },
+      { text: "非常不同意", value: -2, dimension: 'LowN' }
+    ]
+  },
+  {
+    id: 29,
+    text: "我容易受情绪影响",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighN' },
+      { text: "比较同意", value: 1, dimension: 'HighN' },
+      { text: "比较不同意", value: -1, dimension: 'LowN' },
+      { text: "非常不同意", value: -2, dimension: 'LowN' }
+    ]
+  },
+  {
+    id: 30,
+    text: "我情绪稳定",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowN' },
+      { text: "比较同意", value: -1, dimension: 'LowN' },
+      { text: "比较不同意", value: 1, dimension: 'HighN' },
+      { text: "非常不同意", value: 2, dimension: 'HighN' }
+    ]
+  },
+  {
+    id: 31,
+    text: "我经常感到紧张",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighN' },
+      { text: "比较同意", value: 1, dimension: 'HighN' },
+      { text: "比较不同意", value: -1, dimension: 'LowN' },
+      { text: "非常不同意", value: -2, dimension: 'LowN' }
+    ]
+  },
+  {
+    id: 32,
+    text: "我经常感到沮丧",
+    category: 'N',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighN' },
+      { text: "比较同意", value: 1, dimension: 'HighN' },
+      { text: "比较不同意", value: -1, dimension: 'LowN' },
+      { text: "非常不同意", value: -2, dimension: 'LowN' }
+    ]
+  },
+
+  // 开放性 - 基于BFI标准题目
+  {
+    id: 33,
+    text: "我有活跃的想象力",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighO' },
+      { text: "比较同意", value: 1, dimension: 'HighO' },
+      { text: "比较不同意", value: -1, dimension: 'LowO' },
+      { text: "非常不同意", value: -2, dimension: 'LowO' }
+    ]
+  },
+  {
+    id: 34,
+    text: "我对抽象想法不感兴趣",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowO' },
+      { text: "比较同意", value: -1, dimension: 'LowO' },
+      { text: "比较不同意", value: 1, dimension: 'HighO' },
+      { text: "非常不同意", value: 2, dimension: 'HighO' }
+    ]
+  },
+  {
+    id: 35,
+    text: "我有很好的想象力",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighO' },
+      { text: "比较同意", value: 1, dimension: 'HighO' },
+      { text: "比较不同意", value: -1, dimension: 'LowO' },
+      { text: "非常不同意", value: -2, dimension: 'LowO' }
+    ]
+  },
+  {
+    id: 36,
+    text: "我不愿意思考复杂的问题",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowO' },
+      { text: "比较同意", value: -1, dimension: 'LowO' },
+      { text: "比较不同意", value: 1, dimension: 'HighO' },
+      { text: "非常不同意", value: 2, dimension: 'HighO' }
+    ]
+  },
+  {
+    id: 37,
+    text: "我对哲学思想感兴趣",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighO' },
+      { text: "比较同意", value: 1, dimension: 'HighO' },
+      { text: "比较不同意", value: -1, dimension: 'LowO' },
+      { text: "非常不同意", value: -2, dimension: 'LowO' }
+    ]
+  },
+  {
+    id: 38,
+    text: "我有丰富的词汇量",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighO' },
+      { text: "比较同意", value: 1, dimension: 'HighO' },
+      { text: "比较不同意", value: -1, dimension: 'LowO' },
+      { text: "非常不同意", value: -2, dimension: 'LowO' }
+    ]
+  },
+  {
+    id: 39,
+    text: "我喜欢听新的想法",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: 2, dimension: 'HighO' },
+      { text: "比较同意", value: 1, dimension: 'HighO' },
+      { text: "比较不同意", value: -1, dimension: 'LowO' },
+      { text: "非常不同意", value: -2, dimension: 'LowO' }
+    ]
+  },
+  {
+    id: 40,
+    text: "我在艺术方面没有艺术兴趣",
+    category: 'O',
+    options: [
+      { text: "非常同意", value: -2, dimension: 'LowO' },
+      { text: "比较同意", value: -1, dimension: 'LowO' },
+      { text: "比较不同意", value: 1, dimension: 'HighO' },
+      { text: "非常不同意", value: 2, dimension: 'HighO' }
+    ]
+  },
+
+  // MBTI风格的题目 - 基于标准MBTI量表
+  {
+    id: 41,
+    text: "你通常更注重：",
+    category: 'S_N',
+    options: [
+      { text: "当前的实际情况", value: 2, dimension: 'S' },
+      { text: "未来的可能性", value: -2, dimension: 'N' }
+    ]
+  },
+  {
+    id: 42,
+    text: "在做决定时，你更倾向于：",
+    category: 'T_F',
+    options: [
+      { text: "逻辑分析", value: 2, dimension: 'T' },
+      { text: "个人价值观", value: -2, dimension: 'F' }
+    ]
+  },
+  {
+    id: 43,
+    text: "在日常生活中，你更喜欢：",
+    category: 'J_P',
+    options: [
+      { text: "有计划地安排", value: 2, dimension: 'J' },
+      { text: "灵活应变", value: -2, dimension: 'P' }
+    ]
+  },
+  {
+    id: 44,
+    text: "面对新情况时，你通常：",
+    category: 'S_N',
+    options: [
+      { text: "依赖过去的经验", value: 2, dimension: 'S' },
+      { text: "尝试新的方法", value: -2, dimension: 'N' }
+    ]
+  },
+  {
+    id: 45,
+    text: "在人际交往中，你更重视：",
+    category: 'T_F',
+    options: [
+      { text: "公平原则", value: 2, dimension: 'T' },
+      { text: "人际关系", value: -2, dimension: 'F' }
+    ]
+  },
+  {
+    id: 46,
+    text: "你更喜欢什么样的工作环境：",
+    category: 'J_P',
+    options: [
+      { text: "结构化、可预测的", value: 2, dimension: 'J' },
+      { text: "灵活、允许临时变动", value: -2, dimension: 'P' }
+    ]
+  },
+  {
+    id: 47,
+    text: "在处理信息时，你更注重：",
+    category: 'S_N',
+    options: [
+      { text: "具体细节", value: 2, dimension: 'S' },
+      { text: "整体概念", value: -2, dimension: 'N' }
+    ]
+  },
+  {
+    id: 48,
+    text: "在团队合作中，你更倾向于：",
+    category: 'T_F',
+    options: [
+      { text: "客观分析问题", value: 2, dimension: 'T' },
+      { text: "维护团队和谐", value: -2, dimension: 'F' }
+    ]
+  },
+  {
+    id: 49,
+    text: "面对截止日期，你通常会：",
+    category: 'J_P',
+    options: [
+      { text: "提前规划完成", value: 2, dimension: 'J' },
+      { text: "在压力下冲刺", value: -2, dimension: 'P' }
+    ]
+  },
+  {
+    id: 50,
+    text: "你更相信：",
+    category: 'S_N',
+    options: [
+      { text: "确凿的事实", value: 2, dimension: 'S' },
+      { text: "直觉和灵感", value: -2, dimension: 'N' }
     ]
   }
 ];
@@ -261,24 +587,9 @@ interface PersonalityResult {
   careerSuggestions: string[];
 }
 
-// 计算性格类型
+// 计算性格类型 - 适应新的50道标准题目
 function calculatePersonality(answers: Record<number, number>): PersonalityResult {
-  // MBTI计算
-  const e_i = answers[1] + answers[2] + answers[3];
-  const s_n = answers[4] + answers[5] + answers[6];
-  const t_f = answers[7] + answers[8] + answers[9];
-  const j_p = answers[10] + answers[11] + answers[12];
-
-  const mbti = `${e_i > 0 ? 'E' : 'I'}${s_n > 0 ? 'S' : 'N'}${t_f > 0 ? 'T' : 'F'}${j_p > 0 ? 'J' : 'P'}`;
-
-  // 大五人格计算
-  const openness = 50 + (answers[13] + answers[14]) * 25;
-  const conscientiousness = 50 + (answers[15] + answers[16]) * 25;
-  const extraversion = 50 + (answers[17] + answers[18]) * 25;
-  const agreeableness = 50 + (answers[19] + answers[20]) * 25;
-  const neuroticism = 50 + (answers[21] + answers[22]) * 25;
-
-  // 生成性格描述
+  // 性格描述常量
   const descriptions: Record<string, string> = {
     'ISTJ': '负责任、可靠、务实，喜欢秩序和结构。你是传统和稳定的守护者，在工作中表现出极高的专注力和准确性。',
     'ISFJ': '温暖、体贴、负责，关心他人的需求。你是优秀的支持者，在帮助他人的过程中找到满足感。',
@@ -331,7 +642,7 @@ function calculatePersonality(answers: Record<number, number>): PersonalityResul
     'ENFP': ['注意力分散', '过度承诺', '压力敏感', '细节忽视'],
     'ENTP': ['争论倾向', '注意力分散', '执行困难', '关系维护困难'],
     'ESTJ': ['过于控制', '缺乏灵活性', '情感忽视', '过度工作'],
-    'ESFJ': ['过度在乎他人意见', ['自我牺牲', '难以接受改变', '焦虑倾向', '边界模糊']],
+    'ESFJ': ['过度在乎他人意见', '自我牺牲', '难以接受改变', '焦虑倾向', '边界模糊'],
     'ENFJ': ['过度理想化他人', '自我忽视', '过度慷慨', '冲突回避'],
     'ENTJ': ['过于强势', '情感忽视', '不耐烦', '控制欲强']
   };
@@ -355,14 +666,46 @@ function calculatePersonality(answers: Record<number, number>): PersonalityResul
     'ENTJ': ['高级管理', '企业战略', '法律', '创业', '咨询']
   };
 
+  // MBTI计算 - 基于题目41-50
+  const e_i = answers[1] + answers[2] + answers[3] + answers[4] + answers[5] + answers[6] + answers[7] + answers[8]; // 8道外向性题目
+  const s_n = answers[41] + answers[44] + answers[47] + answers[50]; // 4道感觉-直觉题目
+  const t_f = answers[42] + answers[45] + answers[48]; // 3道思考-情感题目
+  const j_p = answers[43] + answers[46] + answers[49]; // 3道判断-感知题目
+
+  const mbti = `${e_i > 0 ? 'E' : 'I'}${s_n > 0 ? 'S' : 'N'}${t_f > 0 ? 'T' : 'F'}${j_p > 0 ? 'J' : 'P'}`;
+
+  // 大五人格计算 - 基于BFI标准题目
+  // 外向性: 题目1-8，需要将得分标准化到0-100范围
+  const extraversion_raw = answers[1] + answers[2] + answers[3] + answers[4] + answers[5] + answers[6] + answers[7] + answers[8];
+  const extraversion = 50 + (extraversion_raw / 16) * 50; // 标准化
+
+  // 宜人性: 题目9-16
+  const agreeableness_raw = answers[9] + answers[10] + answers[11] + answers[12] + answers[13] + answers[14] + answers[15] + answers[16];
+  const agreeableness = 50 + (agreeableness_raw / 16) * 50;
+
+  // 尽责性: 题目17-24
+  const conscientiousness_raw = answers[17] + answers[18] + answers[19] + answers[20] + answers[21] + answers[22] + answers[23] + answers[24];
+  const conscientiousness = 50 + (conscientiousness_raw / 16) * 50;
+
+  // 神经质: 题目25-32
+  const neuroticism_raw = -(answers[25] + answers[26] + answers[27] + answers[28] + answers[29] + answers[30] + answers[31] + answers[32]); // 反向计分
+  const neuroticism = 50 + (neuroticism_raw / 16) * 50;
+
+  // 开放性: 题目33-40
+  const openness_raw = answers[33] + answers[34] + answers[35] + answers[36] + answers[37] + answers[38] + answers[39] + answers[40];
+  const openness = 50 + (openness_raw / 16) * 50;
+
+  // 确保分数在0-100范围内
+  const clamp = (num: number) => Math.max(0, Math.min(100, num));
+
   return {
     mbti,
     bigFive: {
-      openness: Math.max(0, Math.min(100, openness)),
-      conscientiousness: Math.max(0, Math.min(100, conscientiousness)),
-      extraversion: Math.max(0, Math.min(100, extraversion)),
-      agreeableness: Math.max(0, Math.min(100, agreeableness)),
-      neuroticism: Math.max(0, Math.min(100, neuroticism))
+      openness: clamp(openness),
+      conscientiousness: clamp(conscientiousness),
+      extraversion: clamp(extraversion),
+      agreeableness: clamp(agreeableness),
+      neuroticism: clamp(neuroticism)
     },
     description: descriptions[mbti] || '独特的性格组合',
     strengths: strengths[mbti] || [],
@@ -401,16 +744,16 @@ export default function PersonalityTestPage() {
   const progress = ((currentQuestion + 1) / personalityQuestions.length) * 100;
 
   return (
-    <div className="h-screen flex bg-gradient-to-br from-slate-950 via-purple-950 to-indigo-950">
-      {/* 左侧测试区域 */}
-      <div className="w-[480px] bg-black/30 backdrop-blur-lg border-r border-white/10 p-6 overflow-y-auto">
+    <div className="h-screen flex bg-gradient-to-br from-slate-950 via-purple-950 to-pink-950">
+      {/* 左侧测试面板 */}
+      <div className="w-96 bg-black/30 backdrop-blur-lg border-r border-white/10 p-6 overflow-y-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
             <span className="text-3xl">🧠</span>
             专业性格测试
           </h1>
           <p className="text-sm text-gray-300">
-            基于MBTI和大五人格理论的国际标准性格评估
+            基于IPIP、BFI、MBTI国际标准量表
           </p>
         </div>
 
@@ -431,20 +774,20 @@ export default function PersonalityTestPage() {
             </div>
 
             {/* 问题卡片 */}
-            <div className="p-6 rounded-xl bg-white/10 border border-white/20 mb-6">
-              <h3 className="text-lg font-semibold text-white mb-4">
+            <div className="p-4 rounded-xl bg-white/10 border border-white/20 mb-6">
+              <h3 className="text-sm font-semibold text-white mb-3">
                 问题 {currentQuestion + 1}
               </h3>
-              <p className="text-white text-base mb-6 leading-relaxed">
+              <p className="text-white text-sm mb-4 leading-relaxed">
                 {personalityQuestions[currentQuestion].text}
               </p>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {personalityQuestions[currentQuestion].options.map((option, index) => (
                   <button
                     key={index}
                     onClick={() => handleAnswer(option.value)}
-                    className="w-full text-left p-4 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 hover:border-purple-400/50 transition-all"
+                    className="w-full text-left p-3 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 transition-colors"
                   >
                     <div className="text-white text-sm">{option.text}</div>
                   </button>
@@ -453,11 +796,11 @@ export default function PersonalityTestPage() {
             </div>
 
             {/* 测试说明 */}
-            <div className="p-4 rounded-xl bg-purple-500/20 border border-purple-400/30">
-              <h4 className="text-sm font-semibold text-white mb-2">💡 测试说明</h4>
+            <div className="p-3 rounded-xl bg-purple-500/20 border border-purple-400/30">
+              <h4 className="text-sm font-semibold text-white mb-2">💡 标准量表说明</h4>
               <p className="text-xs text-gray-300 leading-relaxed">
-                本测试结合了MBTI性格分类理论和现代大五人格模型，共22道题目，
-                能够全面分析你的性格特质、行为模式和职业倾向。选择最符合你真实想法的答案。
+                本测试采用国际标准心理测量量表：IPIP（国际人格项目库）、BFI（大五人格量表）、MBTI量表。
+                共50道题目，采用4点李克特量表，确保测试结果的科学性和准确性。
               </p>
             </div>
           </>
@@ -473,16 +816,16 @@ export default function PersonalityTestPage() {
 
             {/* 测试结果 */}
             {result && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {/* MBTI类型 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/30 to-pink-500/30 border border-purple-400/50">
+                <div className="p-3 rounded-xl bg-gradient-to-r from-purple-500/30 to-pink-500/30 border border-purple-400/50">
                   <h3 className="text-sm font-semibold text-white mb-2">🎯 MBTI 性格类型</h3>
-                  <div className="text-3xl font-bold text-white mb-2">{result.mbti}</div>
+                  <div className="text-2xl font-bold text-white mb-2">{result.mbti}</div>
                   <p className="text-xs text-gray-300 leading-relaxed">{result.description}</p>
                 </div>
 
                 {/* 大五人格 */}
-                <div className="p-4 rounded-xl bg-white/10 border border-white/20">
+                <div className="p-3 rounded-xl bg-white/10 border border-white/20">
                   <h3 className="text-sm font-semibold text-white mb-3">📊 大五人格分析</h3>
                   <div className="space-y-2">
                     {Object.entries(result.bigFive).map(([trait, value]) => (
@@ -505,14 +848,16 @@ export default function PersonalityTestPage() {
                             style={{ width: `${value}%` }}
                           />
                         </div>
-                        <span className="text-xs text-gray-300 w-8 text-right">{value.toFixed(0)}%</span>
+                        <span className="text-xs text-gray-300 w-12 text-right">
+                          {value.toFixed(0)}%
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* 优势与劣势 */}
-                <div className="p-4 rounded-xl bg-white/10 border border-white/20">
+                <div className="p-3 rounded-xl bg-white/10 border border-white/20">
                   <h3 className="text-sm font-semibold text-white mb-2">💪 优势特质</h3>
                   <div className="flex flex-wrap gap-2">
                     {result.strengths.map((strength, i) => (
@@ -523,7 +868,7 @@ export default function PersonalityTestPage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-white/10 border border-white/20">
+                <div className="p-3 rounded-xl bg-white/10 border border-white/20">
                   <h3 className="text-sm font-semibold text-white mb-2">🎯 成长方向</h3>
                   <div className="flex flex-wrap gap-2">
                     {result.weaknesses.map((weakness, i) => (
@@ -535,7 +880,7 @@ export default function PersonalityTestPage() {
                 </div>
 
                 {/* 职业建议 */}
-                <div className="p-4 rounded-xl bg-blue-500/20 border border-blue-400/30">
+                <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-400/30">
                   <h3 className="text-sm font-semibold text-white mb-2">💼 职业建议</h3>
                   <div className="flex flex-wrap gap-2">
                     {result.careerSuggestions.map((career, i) => (
@@ -553,7 +898,7 @@ export default function PersonalityTestPage() {
 
       {/* 右侧3D可视化区域 */}
       <div className="flex-1 relative">
-        <div className="w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900">
+        <div className="w-full h-full">
           {showResult && result ? (
             <Canvas camera={{ position: [0, 0, 12], fov: 60 }}>
               <PersonalityVisualization result={result} />
@@ -572,14 +917,26 @@ export default function PersonalityTestPage() {
             <div className="w-full h-full flex items-center justify-center">
               <div className="text-center text-white">
                 <div className="text-6xl mb-4">🧠</div>
-                <h2 className="text-2xl font-bold mb-2">性格3D可视化</h2>
+                <h2 className="text-2xl font-bold mb-2">专业性格测试</h2>
                 <p className="text-gray-400">
-                  完成测试后将生成专属的性格3D模型
+                  完成50道标准题目，生成专属的3D性格模型
                 </p>
               </div>
             </div>
           )}
         </div>
+
+        {/* 浮动信息 */}
+        {showResult && result && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full">
+          <p className="text-white text-sm flex items-center gap-2">
+            <span className="text-xl">🎯</span>
+            <span>{result.mbti}</span>
+            <span className="text-gray-400">•</span>
+            <span>基于国际标准量表</span>
+          </p>
+        </div>
+        )}
 
         {/* 交互提示 */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full">

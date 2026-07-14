@@ -20,7 +20,12 @@
     ],
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    // 添加这些选项来更好地支持 React 19
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": [
     "next-env.d.ts",

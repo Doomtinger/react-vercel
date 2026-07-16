@@ -17,6 +17,11 @@ const PainDreamScene = dynamic(
   { ssr: false }
 );
 
+const NeutralDreamScene = dynamic(
+  () => import('@/components/dream-emotion/NeutralDreamScene'),
+  { ssr: false }
+);
+
 // 情感强度接口
 interface EmotionState {
   happiness: number;    // 0-100, 快乐程度
@@ -35,7 +40,7 @@ const defaultEmotion: EmotionState = {
 
 export default function DreamEmotionPage() {
   const [emotionState, setEmotionState] = useState<EmotionState>(defaultEmotion);
-  const [activeScene, setActiveScene] = useState<'happy' | 'pain'>('happy');
+  const [activeScene, setActiveScene] = useState<'happy' | 'pain' | 'neutral'>('happy');
   const [isAutoPlay, setIsAutoPlay] = useState(false);
 
   // 自动情感变化
@@ -64,8 +69,10 @@ export default function DreamEmotionPage() {
   const getSceneIntensity = () => {
     if (activeScene === 'happy') {
       return (emotionState.happiness * 0.6 + emotionState.energy * 0.3 + emotionState.peace * 0.1) / 100;
-    } else {
+    } else if (activeScene === 'pain') {
       return (emotionState.pain * 0.5 + (100 - emotionState.peace) * 0.3 + (100 - emotionState.energy) * 0.2) / 100;
+    } else {
+      return (emotionState.peace * 0.7 + emotionState.energy * 0.2 + emotionState.happiness * 0.1) / 100;
     }
   };
 
@@ -87,6 +94,13 @@ export default function DreamEmotionPage() {
     lightningFreq: intensity * 0.1,             // 闪电频率
     waveHeight: intensity * 2,                  // 海浪高度
     floatSpeed: 0.3 + intensity * 0.4            // 漂浮速度
+  };
+
+  // 中立场景配置
+  const neutralConfig = {
+    grassCount: Math.floor(800 + intensity * 400),   // 草的数量
+    windStrength: 0.5 + intensity * 0.5,          // 风力强度
+    treeSize: 1 + intensity * 0.3                 // 树的大小
   };
 
   return (
@@ -136,6 +150,22 @@ export default function DreamEmotionPage() {
                 <div>
                   <div className="text-white font-medium">痛苦梦境</div>
                   <div className="text-xs text-gray-400">深沉、灰暗、情感释放</div>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveScene('neutral')}
+              className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                activeScene === 'neutral'
+                  ? 'border-green-400 bg-gradient-to-r from-green-500/30 to-emerald-500/30'
+                  : 'border-white/10 hover:border-white/20 bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🌳</span>
+                <div>
+                  <div className="text-white font-medium">中立梦境</div>
+                  <div className="text-xs text-gray-400">宁静、自然、平衡状态</div>
                 </div>
               </div>
             </button>
@@ -202,6 +232,65 @@ export default function DreamEmotionPage() {
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
                   <span>🧘</span>
                   <span>🌸</span>
+                </div>
+              </div>
+            </div>
+          ) : activeScene === 'neutral' ? (
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>平静程度</span>
+                  <span className="text-green-400">{Math.round(emotionState.peace)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={emotionState.peace}
+                  onChange={(e) => setEmotionState({ ...emotionState, peace: parseFloat(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>😰</span>
+                  <span>🌳</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>能量水平</span>
+                  <span className="text-yellow-400">{Math.round(emotionState.energy)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={emotionState.energy}
+                  onChange={(e) => setEmotionState({ ...emotionState, energy: parseFloat(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>💤</span>
+                  <span>⚡</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>快乐程度</span>
+                  <span className="text-pink-400">{Math.round(emotionState.happiness)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={emotionState.happiness}
+                  onChange={(e) => setEmotionState({ ...emotionState, happiness: parseFloat(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>😔</span>
+                  <span>😄</span>
                 </div>
               </div>
             </div>
@@ -295,6 +384,8 @@ export default function DreamEmotionPage() {
               className={`h-full rounded-full transition-all ${
                 activeScene === 'happy'
                   ? 'bg-gradient-to-r from-yellow-400 via-pink-400 to-orange-400'
+                  : activeScene === 'neutral'
+                  ? 'bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400'
                   : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-800'
               }`}
               style={{ width: `${intensity * 100}%` }}
@@ -302,10 +393,10 @@ export default function DreamEmotionPage() {
           </div>
           <div className="flex justify-between text-xs text-gray-400 mt-1">
             <span>
-              {activeScene === 'happy' ? '治愈程度' : '压抑程度'}
+              {activeScene === 'happy' ? '治愈程度' : activeScene === 'neutral' ? '宁静程度' : '压抑程度'}
             </span>
             <span className="font-medium">
-              {activeScene === 'happy' ? '😊' : '😢'} {Math.round(intensity * 100)}%
+              {activeScene === 'happy' ? '😊' : activeScene === 'neutral' ? '🌳' : '😢'} {Math.round(intensity * 100)}%
             </span>
           </div>
         </div>
@@ -314,16 +405,23 @@ export default function DreamEmotionPage() {
         <div className={`p-4 rounded-xl border ${
           activeScene === 'happy'
             ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-400/30'
+            : activeScene === 'neutral'
+            ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400/30'
             : 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border-blue-400/30'
         }`}>
           <h3 className="text-sm font-semibold text-white mb-2">
-            {activeScene === 'happy' ? '🌸 快乐梦境说明' : '🌊 痛苦梦境说明'}
+            {activeScene === 'happy' ? '🌸 快乐梦境说明' : activeScene === 'neutral' ? '🌳 中立梦境说明' : '🌊 痛苦梦境说明'}
           </h3>
           <p className="text-xs text-gray-300 leading-relaxed">
             {activeScene === 'happy' ? (
               <>
                 随机生成色彩鲜艳、高饱和度的治愈系元素。包括彩虹、樱花、星星、光晕等梦幻元素。
                 场景亮度和活力与情感强度正相关，创造温暖舒适的视觉体验。
+              </>
+            ) : activeScene === 'neutral' ? (
+              <>
+                静谧的草原场景，中心有一棵大树随风摇曳。绿色调营造平静安宁的氛围，
+                帮助用户找到内心的平衡点。适合冥想和情绪调节。
               </>
             ) : (
               <>
@@ -342,12 +440,14 @@ export default function DreamEmotionPage() {
             <ul className="list-disc list-inside text-xs text-gray-400 space-y-1 ml-3">
               <li>• 快乐状态偏好暖色调、高饱和度，增强积极情绪</li>
               <li>• 痛苦状态倾向冷色调、低饱和度，避免情绪刺激</li>
+              <li>• 中立状态使用绿色调，象征自然、平衡与治愈</li>
               <li>• 治愈系场景通过色彩联想促进情绪修复</li>
             </ul>
             <p><strong className="text-white">认知神经科学视角：</strong></p>
             <ul className="list-disc list-inside text-xs text-gray-400 space-y-1 ml-3">
               <li>• 正向情绪激活奖赏系统，增加多巴胺分泌</li>
               <li>• 负面情绪的安全表达有助于情绪调节</li>
+              <li>• 自然场景（如草原大树）激活副交感神经系统，促进放松</li>
               <li>• 梦幻场景提供情感安全的想象空间</li>
             </ul>
           </div>
@@ -374,6 +474,23 @@ export default function DreamEmotionPage() {
                 maxDistance={20}
               />
             </Canvas>
+          ) : activeScene === 'neutral' ? (
+            <Canvas
+              camera={{ position: [0, 4, 16], fov: 60 }}
+              gl={{ antialias: true }}
+            >
+              <NeutralDreamScene config={neutralConfig} />
+              <OrbitControls
+                enableZoom={true}
+                enablePan={true}
+                enableRotate={true}
+                zoomSpeed={0.6}
+                panSpeed={0.5}
+                rotateSpeed={0.4}
+                minDistance={6}
+                maxDistance={30}
+              />
+            </Canvas>
           ) : (
             <Canvas
               camera={{ position: [0, 3, 15], fov: 60 }}
@@ -397,10 +514,10 @@ export default function DreamEmotionPage() {
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm px-6 py-3 rounded-full">
             <p className="text-white text-sm flex items-center gap-2">
               <span>
-                {activeScene === 'happy' ? '🌸' : '🌊'}
+                {activeScene === 'happy' ? '🌸' : activeScene === 'neutral' ? '🌳' : '🌊'}
               </span>
               <span>
-                {activeScene === 'happy' ? '快乐梦境' : '痛苦梦境'}
+                {activeScene === 'happy' ? '快乐梦境' : activeScene === 'neutral' ? '中立梦境' : '痛苦梦境'}
               </span>
               <span className="text-gray-400">|</span>
               <span>强度: {Math.round(intensity * 100)}%</span>
@@ -418,12 +535,14 @@ export default function DreamEmotionPage() {
           <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm p-3 rounded-xl">
             <div className="text-white text-xs space-y-1">
               <div className="flex items-center gap-2">
-                <span className={activeScene === 'happy' ? 'text-yellow-400' : 'text-blue-400'}>
-                  {activeScene === 'happy' ? '🌸' : '🌊'}
+                <span className={activeScene === 'happy' ? 'text-yellow-400' : activeScene === 'neutral' ? 'text-green-400' : 'text-blue-400'}>
+                  {activeScene === 'happy' ? '🌸' : activeScene === 'neutral' ? '🌳' : '🌊'}
                 </span>
                 <span>
                   {activeScene === 'happy'
                     ? `${happyConfig.elementCount} 个治愈元素`
+                    : activeScene === 'neutral'
+                    ? `${neutralConfig.grassCount} 个草粒`
                     : `${painConfig.rainDensity} 个雨滴`}
                 </span>
               </div>
@@ -431,6 +550,12 @@ export default function DreamEmotionPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-purple-400">⚡</span>
                   <span>闪电频率: {Math.round(painConfig.lightningFreq * 100)}%</span>
+                </div>
+              )}
+              {activeScene === 'neutral' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400">🌿</span>
+                  <span>风力强度: {neutralConfig.windStrength.toFixed(1)}x</span>
                 </div>
               )}
             </div>

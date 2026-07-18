@@ -8,7 +8,7 @@ import * as THREE from 'three';
 
 // 动态导入樱花场景组件
 const SakuraScene = dynamic(
-  () => import('@/components/cherry-blossom/SakuraScene').then(mod => ({ default: mod.SakuraScene })),
+  () => import('@/components/cherry-blossom/SakuraScene'),
   { ssr: false }
 );
 
@@ -54,7 +54,10 @@ export default function SakuraPage() {
         >
           <Suspense fallback={null}>
             <SakuraScene />
-            <Environment preset="sunset" />
+            {/* 使用简单的环境光代替 HDR 环境 */}
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+            <pointLight position={[-10, 5, -5]} intensity={0.3} color="#FFB6C1" />
             <ContactShadows
               position={[0, -0.1, 0]}
               opacity={0.5}

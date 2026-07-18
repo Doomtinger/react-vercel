@@ -33,7 +33,7 @@ interface NeuralDataPoint {
 interface DimensionalityReduction {
   name: string;
   description: string;
-  project: (data: NeuralDataPoint[]) => { x: number; y: number; z: number; }[];
+  project: (data: NeuralDataPoint[]) => { x: number; y: number; z: number; originalData: NeuralDataPoint }[];
 }
 
 // 模拟高维神经数据生成器
@@ -97,7 +97,7 @@ class PCAReduction implements DimensionalityReduction {
   name = 'PCA (主成分分析)';
   description = '线性降维，保持全局结构，适合连续数据';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     if (data.length === 0) return [];
 
     // 计算特征矩阵
@@ -117,9 +117,6 @@ class PCAReduction implements DimensionalityReduction {
       f.map((val, i) => val - means[i])
     );
 
-    // 计算协方差矩阵（简化版，直接使用前几个特征的线性组合）
-    // 在实际应用中会使用完整的PCA算法
-
     // 这里使用前3个特征作为主成分（简化）
     return data.map((point, i) => {
       const f = centered[i];
@@ -127,7 +124,8 @@ class PCAReduction implements DimensionalityReduction {
       return {
         x: f[0] * 2 + f[1] * 0.5 + f[2] * 0.3,
         y: f[3] * 1.5 + f[4] * 1.2 + f[5] * 0.8,
-        z: f[6] * 1.8 + f[7] * 1.0 + f[8] * 0.6
+        z: f[6] * 1.8 + f[7] * 1.0 + f[8] * 0.6,
+        originalData: point // 保存原始数据
       };
     });
   }
@@ -138,7 +136,7 @@ class TSNEReduction implements DimensionalityReduction {
   name = 't-SNE (t-分布随机邻居嵌入)';
   description = '非线性降维，保持局部邻域结构，适合分离不同类别';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     // 简化的t-SNE模拟：按状态类别聚类
     const stateCenters: Record<string, {x: number; y: number; z: number}> = {
       'resting': { x: -3, y: 2, z: 0 },
@@ -181,7 +179,8 @@ class TSNEReduction implements DimensionalityReduction {
       return {
         x: center.x + trajectoryOffset.x + emotionOffset.x + (Math.random() - 0.5) * scatter,
         y: center.y + trajectoryOffset.y + emotionOffset.y + (Math.random() - 0.5) * scatter,
-        z: center.z + trajectoryOffset.z + emotionOffset.z + (Math.random() - 0.5) * scatter
+        z: center.z + trajectoryOffset.z + emotionOffset.z + (Math.random() - 0.5) * scatter,
+        originalData: point // 保存原始数据
       };
     });
   }
@@ -192,7 +191,7 @@ class UMAPReduction implements DimensionalityReduction {
   name = 'UMAP (均匀流形逼近与投影)';
   description = '非线性降维，平衡局部和全局结构，计算效率高';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     // 模拟UMAP的流形结构保持特性
     return data.map((point, i) => {
       // 创建螺旋流形结构
@@ -222,7 +221,8 @@ class UMAPReduction implements DimensionalityReduction {
       return {
         x: Math.cos(angle + stateModifier) * radius,
         y: Math.sin(angle + stateModifier) * radius * 0.8,
-        z: (i * 0.05 - 2.5) + Math.sin(angle * 2) * 0.5
+        z: (i * 0.05 - 2.5) + Math.sin(angle * 2) * 0.5,
+        originalData: point // 保存原始数据
       };
     });
   }

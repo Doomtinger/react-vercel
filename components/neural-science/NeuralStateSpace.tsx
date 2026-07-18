@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Points, Line, Sphere, Text, Float, Stars, Sparkles, Trail, MeshDistortMaterial, Icosahedron } from '@react-three/drei';
 import * as THREE from 'three';
+import { InteractiveNeuralPoints } from './InteractiveDataPoint';
 
 // 神经数据点投射接口
 interface ProjectedPoint {
@@ -38,7 +39,7 @@ interface NeuralStateSpaceSceneProps {
   isPlaying: boolean;
 }
 
-// 增强的神经状态散点图组件
+// 增强的神经状态散点图组件（添加专业动画）
 export function NeuralStatePoints({
   points,
   getStateColor,
@@ -49,15 +50,22 @@ export function NeuralStatePoints({
   selectedState: string | null;
 }) {
   const pointsRef = useRef<THREE.Points>(null);
+  const groupRef = useRef<THREE.Group>(null);
 
-  // 创建点位置和颜色数组，添加脉冲效果
-  const { positions, colors, sizes } = useMemo(() => {
+  // 创建点位置和颜色数组，添加动画效果
+  const { positions, colors, sizes, originalPositions } = useMemo(() => {
     const positions: Float32Array = new Float32Array(points.length * 3);
     const colors: Float32Array = new Float32Array(points.length * 3);
     const sizes: Float32Array = new Float32Array(points.length);
+    const originalPositions: Float32Array = new Float32Array(points.length * 3);
 
     points.forEach((point, i) => {
       const filtered = selectedState === null || point.originalData.state === selectedState;
+
+      // 保存原始位置
+      originalPositions[i * 3] = point.x;
+      originalPositions[i * 3 + 1] = point.y;
+      originalPositions[i * 3 + 2] = point.z;
 
       if (filtered) {
         positions[i * 3] = point.x;
@@ -85,27 +93,36 @@ export function NeuralStatePoints({
       }
     });
 
-    return { positions, colors, sizes };
+    return { positions, colors, sizes, originalPositions };
   }, [points, getStateColor, selectedState]);
 
   useFrame((state) => {
-    if (pointsRef.current) {
+    if (pointsRef.current && groupRef.current) {
       const time = state.clock.getElapsedTime();
 
-      // 脉冲效果
+      // 专业动画：使用平滑插值
+      const positionsArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
       const sizesArray = pointsRef.current.geometry.attributes.size?.array as Float32Array;
+
       if (sizesArray) {
         for (let i = 0; i < points.length; i++) {
           if (sizesArray[i] > 0) {
+            // 更平滑的脉冲动画
             const baseSize = 0.08;
-            const pulse = Math.sin(time * 2 + i * 0.1) * 0.03;
+            const pulse = Math.sin(time * 3 + i * 0.15) * 0.04; // 更快更明显的脉冲
             sizesArray[i] = baseSize + pulse;
+
+            // 添加轻微的浮动效果
+            const floatOffset = Math.sin(time * 0.5 + i * 0.2) * 0.02;
+            positionsArray[i * 3 + 1] = originalPositions[i * 3 + 1] + floatOffset;
           }
         }
         pointsRef.current.geometry.attributes.size.needsUpdate = true;
+        pointsRef.current.geometry.attributes.position.needsUpdate = true;
       }
-      pointsRef.current.geometry.attributes.position.needsUpdate = true;
-      pointsRef.current.geometry.attributes.color.needsUpdate = true;
+
+      // 整体缓动旋转
+      groupRef.current.rotation.y = Math.sin(time * 0.1) * 0.05;
     }
   });
 
@@ -485,7 +502,7 @@ export function StateTransitionIndicators({
   );
 }
 
-// 3D背景星空
+// 3D背景星空（增强版）
 export function NeuralBackground() {
   const groupRef = useRef<THREE.Group>(null);
 
@@ -500,21 +517,32 @@ export function NeuralBackground() {
   return (
     <group ref={groupRef}>
       <Stars
-        radius={50}
+        radius={100}
         depth={50}
-        count={5000}
+        count={8000}
         factor={4}
         saturation={0}
         fade
         speed={1}
       />
       <Sparkles
-        count={200}
-        scale={20}
-        size={3}
-        speed={0.3}
-        opacity={0.4}
+        count={300}
+        scale={25}
+        size={4}
+        speed={0.4}
+        opacity={0.6}
         color="#ffffff"
+      />
+
+      {/* 添加多层星空效果 */}
+      <Stars
+        radius={60}
+        depth={30}
+        count={3000}
+        factor={2}
+        saturation={0.2}
+        fade
+        speed={0.5}
       />
     </group>
   );
@@ -667,16 +695,28 @@ export function NeuralStateSpaceScene({
 
       {/* 根据可视化模式渲染不同内容 */}
       {vizMode === 'scatter' && (
-        <NeuralStatePoints
-          points={projectedData}
-          getStateColor={getStateColor}
-          selectedState={selectedState}
-        />
+        <>
+          <NeuralStatePoints
+            points={projectedData}
+            getStateColor={getStateColor}
+            selectedState={selectedState}
+          />
+          <InteractiveNeuralPoints
+            points={projectedData}
+            getStateColor={getStateColor}
+            selectedState={selectedState}
+          />
+        </>
       )}
 
       {vizMode === 'trajectory' && (
         <>
           <NeuralStatePoints
+            points={projectedData}
+            getStateColor={getStateColor}
+            selectedState={selectedState}
+          />
+          <InteractiveNeuralPoints
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
@@ -711,10 +751,35 @@ export function NeuralStateSpaceScene({
         selectedState={selectedState}
       />
 
-      {/* 环境光照效果 */}
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={0.3} />
-      <pointLight position={[-10, -10, -10]} intensity={0.2} color="#4A90E2" />
+      {/* 环境光照效果（增强版） */}
+      <ambientLight intensity={0.4} />
+      <directionalLight
+        position={[10, 10, 5]}
+        intensity={1}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+      />
+      <pointLight position={[10, 10, 10]} intensity={0.5} color="#4A90E2" />
+      <pointLight position={[-10, -10, -10]} intensity={0.3} color="#E91E63" />
+      <pointLight position={[0, -10, 10]} intensity={0.4} color="#2ECC71" />
+
+      {/* 环境贴图 - 使用基本的背景色替代 HDR 加载 */}
+      {/* <Environment preset="night" /> */}
+
+      {/* 替代方案：使用简单的环境光照 */}
+      <hemisphereLight
+        args={['#ffffff', '#0x050510', 0.5]}
+        position={[0, 10, 0]}
+      />
+
+      {/* 接触阴影 - 移除可能引起问题的组件 */}
+      {/* <ContactShadows
+        position={[0, -5, 0]}
+        opacity={0.3}
+        scale={20}
+        blur={2}
+        far={10}
+      /> */}
     </group>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Points, Line, Sphere, Text } from '@react-three/drei';
+import { Points, Line, Sphere, Text, Float, Stars, Sparkles, Trail, MeshDistortMaterial, Icosahedron } from '@react-three/drei';
 import * as THREE from 'three';
 
 // 神经数据点投射接口
@@ -38,24 +38,23 @@ interface NeuralStateSpaceSceneProps {
   isPlaying: boolean;
 }
 
-// 神经状态散点图组件
+// 增强的神经状态散点图组件
 export function NeuralStatePoints({
   points,
   getStateColor,
-  selectedState,
-  currentTime
+  selectedState
 }: {
   points: ProjectedPoint[];
   getStateColor: (state: string, emotion?: string) => string;
   selectedState: string | null;
-  currentTime: number;
 }) {
-  const pointsRef = useRef<THREE.Points>();
+  const pointsRef = useRef<THREE.Points>(null);
 
-  // 创建点位置和颜色数组
-  const { positions, colors } = useMemo(() => {
+  // 创建点位置和颜色数组，添加脉冲效果
+  const { positions, colors, sizes } = useMemo(() => {
     const positions: Float32Array = new Float32Array(points.length * 3);
     const colors: Float32Array = new Float32Array(points.length * 3);
+    const sizes: Float32Array = new Float32Array(points.length);
 
     points.forEach((point, i) => {
       const filtered = selectedState === null || point.originalData.state === selectedState;
@@ -69,8 +68,12 @@ export function NeuralStatePoints({
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;
+
+        // 根据状态调整大小
+        const baseSize = 0.08;
+        const variation = Math.sin(i * 0.1) * 0.02;
+        sizes[i] = baseSize + variation;
       } else {
-        // 过滤的点设置为透明
         positions[i * 3] = point.x;
         positions[i * 3 + 1] = point.y;
         positions[i * 3 + 2] = point.z;
@@ -78,45 +81,96 @@ export function NeuralStatePoints({
         colors[i * 3] = 0;
         colors[i * 3 + 1] = 0;
         colors[i * 3 + 2] = 0;
+        sizes[i] = 0;
       }
     });
 
-    return { positions, colors };
+    return { positions, colors, sizes };
   }, [points, getStateColor, selectedState]);
 
-  useFrame(() => {
+  useFrame((state) => {
     if (pointsRef.current) {
+      const time = state.clock.getElapsedTime();
+
+      // 脉冲效果
+      const sizesArray = pointsRef.current.geometry.attributes.size?.array as Float32Array;
+      if (sizesArray) {
+        for (let i = 0; i < points.length; i++) {
+          if (sizesArray[i] > 0) {
+            const baseSize = 0.08;
+            const pulse = Math.sin(time * 2 + i * 0.1) * 0.03;
+            sizesArray[i] = baseSize + pulse;
+          }
+        }
+        pointsRef.current.geometry.attributes.size.needsUpdate = true;
+      }
       pointsRef.current.geometry.attributes.position.needsUpdate = true;
       pointsRef.current.geometry.attributes.color.needsUpdate = true;
     }
   });
 
   return (
-    <Points
-      ref={pointsRef}
-      positions={positions}
-      colors={colors}
-      size={0.15}
-      sizeAttenuation={true}
-      transparent
-      opacity={0.8}
-    />
+    <>
+      <Points
+        ref={pointsRef}
+        positions={positions}
+        colors={colors}
+        sizes={sizes}
+      >
+        <pointsMaterial
+          size={0.08}
+          sizeAttenuation={true}
+          vertexColors
+          transparent
+          opacity={0.9}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </Points>
+
+      {/* 为每个点添加发光球体 */}
+      {points.map((point) => {
+        const filtered = selectedState === null || point.originalData.state === selectedState;
+        if (!filtered) return null;
+
+        const color = getStateColor(point.originalData.state, point.originalData.emotion);
+        return (
+          <Float
+            key={point.originalData.id}
+            speed={2}
+            rotationIntensity={0.5}
+            floatIntensity={0.5}
+          >
+            <Sphere
+              position={[point.x, point.y, point.z]}
+              args={[0.03, 16, 16]}
+            >
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={0.6}
+                blending={THREE.AdditiveBlending}
+              />
+            </Sphere>
+          </Float>
+        );
+      })}
+    </>
   );
 }
 
-// 时间轨迹组件
+// 增强的时间轨迹组件
 export function NeuralTrajectory({
   points,
   getStateColor,
-  selectedState,
-  currentTime
+  selectedState
 }: {
   points: ProjectedPoint[];
   getStateColor: (state: string, emotion?: string) => string;
   selectedState: string | null;
-  currentTime: number;
 }) {
-  const groupRef = useRef<THREE.Group>();
+  const groupRef = useRef<THREE.Group>(null);
+  const lineRefs = useRef<any[]>([]);
 
   // 创建轨迹线条
   const trajectoryLines = useMemo(() => {
@@ -125,6 +179,7 @@ export function NeuralTrajectory({
       color: string;
       state: string;
       emotion?: string;
+      id: number;
     }> = [];
 
     // 按时间顺序连接点
@@ -132,7 +187,6 @@ export function NeuralTrajectory({
       const current = points[i];
       const next = points[i + 1];
 
-      // 只连接相同状态的点，或显示状态转换
       const filtered = selectedState === null ||
                        current.originalData.state === selectedState ||
                        next.originalData.state === selectedState;
@@ -145,7 +199,8 @@ export function NeuralTrajectory({
           ],
           color: getStateColor(current.originalData.state, current.originalData.emotion),
           state: current.originalData.state,
-          emotion: current.originalData.emotion
+          emotion: current.originalData.emotion,
+          id: i
         });
       }
     }
@@ -155,28 +210,55 @@ export function NeuralTrajectory({
 
   useFrame((state) => {
     if (groupRef.current) {
-      // 轨动整个轨迹组
-      groupRef.current.rotation.y += 0.001;
+      const time = state.clock.getElapsedTime();
+      // 缓慢轨动整个轨迹组
+      groupRef.current.rotation.y = Math.sin(time * 0.1) * 0.1;
     }
+
+    // 线条流动效果
+    lineRefs.current.forEach((line, i) => {
+      if (line) {
+        const time = state.clock.getElapsedTime();
+        const material = line.material as THREE.LineBasicMaterial;
+        if (material) {
+          material.opacity = 0.4 + Math.sin(time * 2 + i * 0.2) * 0.2;
+        }
+      }
+    });
   });
 
   return (
     <group ref={groupRef}>
       {trajectoryLines.map((line, i) => (
-        <Line
-          key={i}
-          points={line.points as any}
-          color={line.color}
-          lineWidth={0.02}
-          transparent
-          opacity={0.6}
-        />
+        <group key={line.id}>
+          <Line
+            ref={(ref) => { if (ref) lineRefs.current[i] = ref; }}
+            points={line.points as any}
+            color={line.color}
+            lineWidth={2}
+            transparent
+            opacity={0.6}
+            blending={THREE.AdditiveBlending}
+          />
+          {/* 在连接点添加小发光节点 */}
+          <Sphere
+            position={line.points[0] as [number, number, number]}
+            args={[0.02, 8, 8]}
+          >
+            <meshBasicMaterial
+              color={line.color}
+              transparent
+              opacity={0.8}
+              blending={THREE.AdditiveBlending}
+            />
+          </Sphere>
+        </group>
       ))}
     </group>
   );
 }
 
-// 流形场组件（状态密度可视化）
+// 增强的流形场组件
 export function FlowField({
   points,
   getStateColor,
@@ -186,45 +268,42 @@ export function FlowField({
   getStateColor: (state: string, emotion?: string) => string;
   selectedState: string | null;
 }) {
-  const groupRef = useRef<THREE.Group>();
+  const groupRef = useRef<THREE.Group>(null);
 
   // 创建网格流场
   const flowParticles = useMemo(() => {
-    const gridSize = 8;
+    const gridSize = 6;
     const particles = [];
 
     for (let x = 0; x < gridSize; x++) {
       for (let y = 0; y < gridSize; y++) {
         for (let z = 0; z < gridSize; z++) {
-          // 计算该网格点的状态密度
           let density = 0;
           let dominantState = 'resting';
           let dominantEmotion: string | undefined;
 
           points.forEach(point => {
             const dist = Math.sqrt(
-              Math.pow((point.x * 3) / 6 - x, 2) +
-              Math.pow((point.y * 3) / 6 - y, 2) +
-              Math.pow((point.z * 3) / 6 - z, 2)
+              Math.pow((point.x + 5) / 10 * gridSize - x, 2) +
+              Math.pow((point.y + 5) / 10 * gridSize - y, 2) +
+              Math.pow((point.z + 5) / 10 * gridSize - z, 2)
             );
 
             if (dist < 2) {
               const weight = 1 - dist / 2;
-              if (point.originalData.state === point.originalData.state) {
-                density += weight;
-              }
+              density += weight;
               dominantState = point.originalData.state;
               dominantEmotion = point.originalData.emotion;
             }
           });
 
-          if (density > 0.5) {
+          if (density > 0.3) {
             particles.push({
               position: [
-                (x / gridSize) * 8 - 4,
-                (y / gridSize) * 8 - 4,
-                (z / gridSize) * 8 - 4
-              ],
+                (x / gridSize) * 10 - 5,
+                (y / gridSize) * 10 - 5,
+                (z / gridSize) * 10 - 5
+              ] as [number, number, number],
               state: dominantState,
               emotion: dominantEmotion,
               density
@@ -232,50 +311,70 @@ export function FlowField({
           }
         }
       }
-    }
 
-    return particles;
+      return particles || [];
+    }
   }, [points, getStateColor, selectedState]);
 
   useFrame((state) => {
     if (groupRef.current) {
+      const time = state.clock.getElapsedTime();
       // 缓慢流动动画
-      groupRef.current.rotation.x += 0.0005;
-      groupRef.current.rotation.y += 0.001;
+      groupRef.current.rotation.x = Math.sin(time * 0.05) * 0.2;
+      groupRef.current.rotation.y = time * 0.02;
     }
   });
 
   return (
     <group ref={groupRef}>
-      {flowParticles.map((particle, i) => {
+      {flowParticles?.map((particle, i) => {
         const filtered = selectedState === null || particle.state === selectedState;
         if (!filtered) return null;
 
         const color = getStateColor(particle.state, particle.emotion);
-        const size = 0.05 + particle.density * 0.1;
+        const size = 0.1 + particle.density * 0.15;
 
         return (
-          <Sphere
+          <Float
             key={i}
-            position={particle.position as [number, number, number]}
-            args={[size, 8, 8]}
+            speed={1 + Math.random()}
+            rotationIntensity={0.2}
+            floatIntensity={0.3}
           >
-            <meshBasicMaterial
-              color={color}
-              transparent
-              opacity={0.4 * particle.density}
-            />
-          </Sphere>
+            <Icosahedron
+              position={particle.position}
+              args={[size, 1]}
+            >
+              <MeshDistortMaterial
+                color={color}
+                transparent
+                opacity={0.3 * particle.density}
+                distort={0.3}
+                speed={2}
+                blending={THREE.AdditiveBlending}
+              />
+            </Icosahedron>
+          </Float>
         );
       })}
+
+      {/* 添加闪烁粒子效果 */}
+      <Sparkles
+        count={100}
+        scale={12}
+        size={2}
+        speed={0.4}
+        opacity={0.5}
+        color="#ffffff"
+      />
     </group>
   );
 }
 
-// 状态转换指示器
+// 增强的状态转换指示器
 export function StateTransitionIndicators({
   neuralData,
-  getStateColor
+  projectedData
 }: {
   neuralData: Array<{
     id: number;
@@ -283,9 +382,9 @@ export function StateTransitionIndicators({
     state: string;
     emotion?: string;
   }>;
-  getStateColor: (state: string, emotion?: string) => string;
+  projectedData: ProjectedPoint[];
 }) {
-  const groupRef = useRef<THREE.Group>();
+  const groupRef = useRef<THREE.Group>(null);
 
   // 找出状态转换点
   const transitionPoints = useMemo(() => {
@@ -295,55 +394,215 @@ export function StateTransitionIndicators({
       const prev = neuralData[i - 1];
       const curr = neuralData[i];
 
-      if (prev.state !== curr.state) {
-        const projectedPrev = { x: Math.cos(i * 0.1) * 3, y: Math.sin(i * 0.1) * 3, z: (i * 0.05) - 2 };
-        const projectedCurr = {
-          x: Math.cos((i + 1) * 0.1) * 3,
-          y: Math.sin((i + 1) * 0.1) * 3,
-          z: ((i + 1) * 0.05) - 2
-        };
-
+      if (prev.state !== curr.state && projectedData[i] && projectedData[i - 1]) {
         transitions.push({
-          from: projectedPrev,
-          to: projectedCurr,
+          from: projectedData[i - 1],
+          to: projectedData[i],
           fromState: prev.state,
           toState: curr.state,
           fromEmotion: prev.emotion,
           toEmotion: curr.emotion,
-          timestamp: curr.timestamp
+          timestamp: curr.timestamp,
+          id: i
         });
       }
     }
 
     return transitions;
-  }, [neuralData]);
+  }, [neuralData, projectedData]);
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      const time = state.clock.getElapsedTime();
+      groupRef.current.rotation.y = Math.sin(time * 0.1) * 0.05;
+    }
+  });
 
   return (
     <group ref={groupRef}>
-      {transitionPoints.map((transition, i) => (
-        <group key={i}>
-          {/* 转换箭头 */}
-          <Line
-            points={[
-              [transition.from.x, transition.from.y, transition.from.z],
-              [transition.to.x, transition.to.y, transition.to.z]
-            ] as any}
+      {transitionPoints.map((transition) => (
+        <group key={transition.id}>
+          {/* 转换能量弧 */}
+          <Trail
+            width={0.1}
             color="#FFD700"
-            lineWidth={0.05}
-          />
+            length={2}
+            attenuation={(width: number) => width * 0.5}
+          >
+            <Sphere
+              position={[
+                (transition.from.x + transition.to.x) / 2,
+                (transition.from.y + transition.to.y) / 2,
+                (transition.from.z + transition.to.z) / 2
+              ]}
+              args={[0.05, 8, 8]}
+            >
+              <meshBasicMaterial
+                color="#FFD700"
+                transparent
+                opacity={0.8}
+                blending={THREE.AdditiveBlending}
+              />
+            </Sphere>
+          </Trail>
 
           {/* 转换点标记 */}
+          <Float
+            speed={3}
+            rotationIntensity={1}
+            floatIntensity={0.5}
+          >
+            <Icosahedron
+              position={[transition.to.x, transition.to.y, transition.to.z]}
+              args={[0.12, 0]}
+            >
+              <MeshDistortMaterial
+                color="#FFD700"
+                transparent
+                opacity={0.7}
+                distort={0.5}
+                speed={3}
+                blending={THREE.AdditiveBlending}
+              />
+            </Icosahedron>
+          </Float>
+
+          {/* 转换光晕 */}
           <Sphere
             position={[transition.to.x, transition.to.y, transition.to.z]}
-            args={[0.1, 8, 8]}
+            args={[0.2, 16, 16]}
           >
-            <meshBasicMaterial color="#FFD700" />
+            <meshBasicMaterial
+              color="#FFD700"
+              transparent
+              opacity={0.15}
+              blending={THREE.AdditiveBlending}
+            />
           </Sphere>
-
-          {/* 转换文字标签 */}
-          {/* 在实际应用中，这里可以使用Text组件显示状态名称 */}
         </group>
       ))}
+    </group>
+  );
+}
+
+// 3D背景星空
+export function NeuralBackground() {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      const time = state.clock.getElapsedTime();
+      groupRef.current.rotation.y = time * 0.01;
+      groupRef.current.rotation.x = Math.sin(time * 0.005) * 0.1;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <Stars
+        radius={50}
+        depth={50}
+        count={5000}
+        factor={4}
+        saturation={0}
+        fade
+        speed={1}
+      />
+      <Sparkles
+        count={200}
+        scale={20}
+        size={3}
+        speed={0.3}
+        opacity={0.4}
+        color="#ffffff"
+      />
+    </group>
+  );
+}
+
+// 增强的状态标签
+export function StateLabels({
+  getStateColor,
+  selectedState
+}: {
+  getStateColor: (state: string, emotion?: string) => string;
+  selectedState: string | null;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const states = ['resting', 'memory', 'attention', 'emotional', 'cognitive_load'];
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      const time = state.clock.getElapsedTime();
+
+      // 浮动效果
+      states.forEach((_, i) => {
+        const child = groupRef.current?.children[i];
+        if (child) {
+          child.position.y = (4 - i * 0.8) + Math.sin(time * 0.5 + i) * 0.05;
+        }
+      });
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[5, 4, 0]}>
+      {states.map((state, i) => {
+        const y = 4 - i * 0.8;
+        const color = getStateColor(state);
+        const isSelected = selectedState === state;
+
+        return (
+          <group key={state} position={[0, y, 0]}>
+            {/* 状态球体 */}
+            <Float
+              speed={2}
+              rotationIntensity={0.3}
+              floatIntensity={0.2}
+            >
+              <Icosahedron args={[0.15, 1]}>
+                <MeshDistortMaterial
+                  color={color}
+                  transparent
+                  opacity={isSelected ? 0.9 : 0.5}
+                  distort={0.3}
+                  speed={1}
+                  blending={THREE.AdditiveBlending}
+                />
+              </Icosahedron>
+            </Float>
+
+            {/* 光晕效果 */}
+            {isSelected && (
+              <Sphere args={[0.25, 16, 16]}>
+                <meshBasicMaterial
+                  color={color}
+                  transparent
+                  opacity={0.2}
+                  blending={THREE.AdditiveBlending}
+                />
+              </Sphere>
+            )}
+
+            {/* 状态文字 */}
+            <Text
+              position={[0.4, y, 0]}
+              fontSize={0.35}
+              color="white"
+              anchorX="left"
+              outlineWidth={0.02}
+              outlineColor="#000000"
+            >
+              {
+                state === 'resting' ? '静息态' :
+                state === 'memory' ? '记忆' :
+                state === 'attention' ? '注意力' :
+                state === 'emotional' ? '情绪' : '认知负荷'
+              }
+            </Text>
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -358,9 +617,9 @@ export function NeuralStateSpaceScene({
   getStateColor,
   isPlaying
 }: NeuralStateSpaceSceneProps) {
-  const groupRef = useRef<THREE.Group>();
+  const groupRef = useRef<THREE.Group>(null);
 
-  useFrame((state) => {
+  useFrame(() => {
     if (groupRef.current && isPlaying) {
       // 时间演化动画
       const rotationSpeed = 0.001;
@@ -370,8 +629,41 @@ export function NeuralStateSpaceScene({
 
   return (
     <group ref={groupRef}>
+      {/* 3D背景 */}
+      <NeuralBackground />
+
       {/* 坐标网格 */}
-      <gridHelper args={[10, 10, 10]} position={[0, 0, -3]} />
+      <gridHelper args={[15, 15, 0x303030, 0x202020]} position={[0, -3, 0]} />
+
+      {/* 增强的坐标轴 */}
+      <group position={[-6, -3, -6]}>
+        <Line
+          points={[[0, 0, 0], [12, 0, 0]]}
+          color="#4A90E2"
+          lineWidth={2}
+        />
+        <Text position={[6, 0, 0.2]} fontSize={0.3} color="#4A90E2">
+          X
+        </Text>
+
+        <Line
+          points={[[0, 0, 0], [0, 6, 0]]}
+          color="#2ECC71"
+          lineWidth={2}
+        />
+        <Text position={[0, 3, 0.2]} fontSize={0.3} color="#2ECC71">
+          Y
+        </Text>
+
+        <Line
+          points={[[0, 0, 0], [0, 0, 12]]}
+          color="#E91E63"
+          lineWidth={2}
+        />
+        <Text position={[0.2, 0, 6]} fontSize={0.3} color="#E91E63">
+          Z
+        </Text>
+      </group>
 
       {/* 根据可视化模式渲染不同内容 */}
       {vizMode === 'scatter' && (
@@ -379,7 +671,6 @@ export function NeuralStateSpaceScene({
           points={projectedData}
           getStateColor={getStateColor}
           selectedState={selectedState}
-          currentTime={currentTime}
         />
       )}
 
@@ -389,13 +680,11 @@ export function NeuralStateSpaceScene({
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
-            currentTime={currentTime}
           />
           <NeuralTrajectory
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
-            currentTime={currentTime}
           />
         </>
       )}
@@ -412,40 +701,20 @@ export function NeuralStateSpaceScene({
       {vizMode === 'trajectory' && (
         <StateTransitionIndicators
           neuralData={neuralData}
-          getStateColor={getStateColor}
+          projectedData={projectedData}
         />
       )}
 
-      {/* 状态标签 */}
-      <group position={[5, 4, 0]}>
-        {['resting', 'memory', 'attention', 'emotional', 'cognitive_load'].map((state, i) => {
-          const y = 4 - i * 0.8;
-          return (
-            <group key={state} position={[0, y, 0]}>
-              <Sphere args={[0.15, 8, 8]}>
-                <meshBasicMaterial
-                  color={getStateColor(state)}
-                  transparent
-                  opacity={selectedState === state ? 0.9 : 0.4}
-                />
-              </Sphere>
-              <Text
-                position={[0.3, y, 0]}
-                fontSize={0.3}
-                color="white"
-                anchorX="left"
-              >
-                {
-                  state === 'resting' ? '静息态' :
-                  state === 'memory' ? '记忆' :
-                  state === 'attention' ? '注意力' :
-                  state === 'emotional' ? '情绪' : '认知负荷'
-                }
-              </Text>
-            </group>
-          );
-        })}
-      </group>
+      {/* 增强的状态标签 */}
+      <StateLabels
+        getStateColor={getStateColor}
+        selectedState={selectedState}
+      />
+
+      {/* 环境光照效果 */}
+      <ambientLight intensity={0.5} />
+      <pointLight position={[10, 10, 10]} intensity={0.3} />
+      <pointLight position={[-10, -10, -10]} intensity={0.2} color="#4A90E2" />
     </group>
   );
 }

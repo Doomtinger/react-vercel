@@ -4,6 +4,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import dynamic from 'next/dynamic';
+import { VisualizationQuestionnaire, VisualizationPreferences } from '@/components/neural-science/VisualizationQuestionnaire';
+import { generateVizParameters } from '@/components/neural-science/applyVisualizationPreferences';
 
 // 动态导入3D组件
 const NeuralStateVisualization = dynamic(
@@ -365,10 +367,45 @@ export default function NeuralStateSpacePage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [patternSeed, setPatternSeed] = useState(1000); // 固定初始值避免 hydration 错误
 
+  // 问卷相关状态
+  const [showQuestionnaire, setShowQuestionnaire] = useState(true);
+  const [vizPreferences, setVizPreferences] = useState<VisualizationPreferences | null>(null);
+  const [vizParams, setVizParams] = useState<any>(null);
+
   // 在客户端挂载后生成随机种子
   useEffect(() => {
     setPatternSeed(Math.floor(Math.random() * 10000));
   }, []);
+
+  // 处理问卷完成
+  const handleQuestionnaireComplete = (preferences: VisualizationPreferences) => {
+    setVizPreferences(preferences);
+    setShowQuestionnaire(false);
+
+    // 生成可视化参数
+    const params = generateVizParameters(preferences);
+    setVizParams(params);
+
+    // 根据偏好设置默认参数
+    switch (preferences.visualStyle) {
+      case 'scientific':
+        setReductionMethod('pca');
+        break;
+      case 'artistic':
+        setReductionMethod('wave');
+        break;
+      case 'futuristic':
+        setReductionMethod('network');
+        break;
+    }
+
+    // 根据数据密度调整数据点数量
+    if (preferences.dataDensity !== 'moderate') {
+      const newDataCount = preferences.dataDensity === 'minimal' ? 60 : 200;
+      const data = generateNeuralData(newDataCount);
+      setNeuralData(data);
+    }
+  };
 
   // 生成模拟神经数据
   useEffect(() => {
@@ -487,7 +524,23 @@ export default function NeuralStateSpacePage() {
   const stats = getStatistics();
 
   return (
-    <div className="h-screen flex bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950">
+    <>
+      {/* 问卷系统 */}
+      {showQuestionnaire && (
+        <VisualizationQuestionnaire onComplete={handleQuestionnaireComplete} />
+      )}
+
+      {/* 再次定制按钮 */}
+      {!showQuestionnaire && (
+        <button
+          onClick={() => setShowQuestionnaire(true)}
+          className="fixed top-4 right-4 z-40 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium shadow-lg"
+        >
+          🎨 重新定制
+        </button>
+      )}
+
+      <div className="h-screen flex bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950">
       {/* 左侧控制面板 */}
       <div className="w-[420px] bg-black/30 backdrop-blur-lg border-r border-white/10 p-5 overflow-y-auto">
         <div className="mb-6">
@@ -710,6 +763,7 @@ export default function NeuralStateSpacePage() {
                 currentTime={currentTime}
                 getStateColor={getStateColor}
                 isPlaying={isPlaying}
+                vizParams={vizParams}
               />
               <OrbitControls
                 enableZoom={true}
@@ -762,5 +816,6 @@ export default function NeuralStateSpacePage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -37,17 +37,20 @@ interface NeuralStateSpaceSceneProps {
   currentTime: number;
   getStateColor: (state: string, emotion?: string) => string;
   isPlaying: boolean;
+  vizParams?: any; // 可视化参数，来自问卷系统
 }
 
-// 增强的神经状态散点图组件（添加专业动画）
+// 增强的神经状态散点图组件（添加专业动画和参数支持）
 export function NeuralStatePoints({
   points,
   getStateColor,
-  selectedState
+  selectedState,
+  animationParams
 }: {
   points: ProjectedPoint[];
   getStateColor: (state: string, emotion?: string) => string;
   selectedState: string | null;
+  animationParams?: any;
 }) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
@@ -100,6 +103,11 @@ export function NeuralStatePoints({
     if (pointsRef.current && groupRef.current) {
       const time = state.clock.getElapsedTime();
 
+      // 应用用户偏好的动画参数
+      const animSpeed = animationParams?.animationSpeed || 1.0;
+      const pulseIntensity = animationParams?.pulseIntensity || 0.04;
+      const baseParticleSize = animationParams?.particleSize || 0.08;
+
       // 专业动画：使用平滑插值
       const positionsArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
       const sizesArray = pointsRef.current.geometry.attributes.size?.array as Float32Array;
@@ -107,13 +115,12 @@ export function NeuralStatePoints({
       if (sizesArray) {
         for (let i = 0; i < points.length; i++) {
           if (sizesArray[i] > 0) {
-            // 更平滑的脉冲动画
-            const baseSize = 0.08;
-            const pulse = Math.sin(time * 3 + i * 0.15) * 0.04; // 更快更明显的脉冲
-            sizesArray[i] = baseSize + pulse;
+            // 应用用户偏好的脉冲强度和速度
+            const pulse = Math.sin(time * (3 * animSpeed) + i * 0.15) * pulseIntensity;
+            sizesArray[i] = baseParticleSize + pulse;
 
             // 添加轻微的浮动效果
-            const floatOffset = Math.sin(time * 0.5 + i * 0.2) * 0.02;
+            const floatOffset = Math.sin(time * (0.5 * animSpeed) + i * 0.2) * 0.02;
             positionsArray[i * 3 + 1] = originalPositions[i * 3 + 1] + floatOffset;
           }
         }
@@ -122,7 +129,8 @@ export function NeuralStatePoints({
       }
 
       // 整体缓动旋转
-      groupRef.current.rotation.y = Math.sin(time * 0.1) * 0.05;
+      const rotationAmount = animationParams?.rotationSpeed || 0.003;
+      groupRef.current.rotation.y = Math.sin(time * 0.1) * rotationAmount * 10;
     }
   });
 
@@ -176,15 +184,17 @@ export function NeuralStatePoints({
   );
 }
 
-// 增强的时间轨迹组件
+// 增强的时间轨迹组件（支持动画参数）
 export function NeuralTrajectory({
   points,
   getStateColor,
-  selectedState
+  selectedState,
+  animationParams
 }: {
   points: ProjectedPoint[];
   getStateColor: (state: string, emotion?: string) => string;
   selectedState: string | null;
+  animationParams?: any;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const lineRefs = useRef<any[]>([]);
@@ -228,17 +238,25 @@ export function NeuralTrajectory({
   useFrame((state) => {
     if (groupRef.current) {
       const time = state.clock.getElapsedTime();
-      // 缓慢轨动整个轨迹组
-      groupRef.current.rotation.y = Math.sin(time * 0.1) * 0.1;
+
+      // 应用用户偏好的动画参数
+      const rotationAmount = animationParams?.rotationSpeed || 0.003;
+      const animSpeed = animationParams?.animationSpeed || 1.0;
+
+      // 轨动整个轨迹组 - 使用用户偏好的速度
+      groupRef.current.rotation.y = Math.sin(time * 0.1 * animSpeed) * rotationAmount * 20;
     }
 
-    // 线条流动效果
+    // 线条流动效果 - 应用用户偏好
     lineRefs.current.forEach((line, i) => {
       if (line) {
         const time = state.clock.getElapsedTime();
         const material = line.material as THREE.LineBasicMaterial;
         if (material) {
-          material.opacity = 0.4 + Math.sin(time * 2 + i * 0.2) * 0.2;
+          const glowIntensity = animationParams?.glowIntensity || 0.5;
+          const animSpeed = animationParams?.animationSpeed || 1.0;
+
+          material.opacity = 0.4 + Math.sin(time * (2 * animSpeed) + i * 0.2) * (glowIntensity * 0.4);
         }
       }
     });
@@ -622,7 +640,7 @@ export function StateLabels({
   );
 }
 
-// 主场景组件
+// 主场景组件（增强版 - 支持可视化参数）
 export function NeuralStateSpaceScene({
   projectedData,
   neuralData,
@@ -630,14 +648,28 @@ export function NeuralStateSpaceScene({
   selectedState,
   currentTime,
   getStateColor,
-  isPlaying
+  isPlaying,
+  vizParams
 }: NeuralStateSpaceSceneProps) {
   const groupRef = useRef<THREE.Group>(null);
 
+  // 获取可视化参数，如果没有则使用默认值
+  const params = vizParams || {
+    animationSpeed: 1.0,
+    pulseIntensity: 0.04,
+    rotationSpeed: 0.003,
+    glowIntensity: 0.5,
+    bloomStrength: 1.0,
+    distortionAmount: 0.3,
+    particleSize: 0.08,
+    particleOpacity: 0.8,
+    colorScheme: ['#4A90E2', '#9B59D6', '#2ECC71', '#3498DB', '#1ABC9C']
+  };
+
   useFrame(() => {
     if (groupRef.current && isPlaying) {
-      // 时间演化动画
-      const rotationSpeed = 0.001;
+      // 应用用户偏好的旋转速度
+      const rotationSpeed = params.rotationSpeed;
       groupRef.current.rotation.y += rotationSpeed;
     }
   });
@@ -687,11 +719,13 @@ export function NeuralStateSpaceScene({
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
+            animationParams={params}
           />
           <InteractiveNeuralPoints
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
+            hoverScale={params.hoverScale || 1.3}
           />
         </>
       )}
@@ -702,11 +736,13 @@ export function NeuralStateSpaceScene({
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
+            animationParams={params}
           />
           <InteractiveNeuralPoints
             points={projectedData}
             getStateColor={getStateColor}
             selectedState={selectedState}
+            hoverScale={params.hoverScale || 1.3}
           />
           <NeuralTrajectory
             points={projectedData}

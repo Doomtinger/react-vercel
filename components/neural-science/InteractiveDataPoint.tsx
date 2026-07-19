@@ -17,15 +17,17 @@ interface InteractiveDataPointProps {
   };
   onHover?: (data: any) => void;
   onClick?: (data: any) => void;
+  hoverScale?: number; // 悬停时的缩放比例
 }
 
-// 交互式数据点组件
+// 交互式数据点组件（支持参数化）
 export function InteractiveDataPoint({
   position,
   color,
   data,
   onHover,
-  onClick
+  onClick,
+  hoverScale = 1.5
 }: InteractiveDataPointProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
@@ -36,8 +38,8 @@ export function InteractiveDataPoint({
     if (meshRef.current) {
       const time = clock.getElapsedTime();
 
-      // 悬停动画
-      const targetScale = hovered ? 1.5 : 1;
+      // 悬停动画 - 使用用户偏好的缩放比例
+      const targetScale = hovered ? hoverScale : 1;
       const currentScale = meshRef.current.scale.x;
       const newScale = THREE.MathUtils.lerp(currentScale, targetScale, 0.1);
 
@@ -138,12 +140,14 @@ interface InteractiveNeuralPointsProps {
   }>;
   getStateColor: (state: string, emotion?: string) => string;
   selectedState?: string | null;
+  hoverScale?: number; // 悬停时的缩放比例
 }
 
 export function InteractiveNeuralPoints({
   points,
   getStateColor,
-  selectedState
+  selectedState,
+  hoverScale = 1.5
 }: InteractiveNeuralPointsProps) {
   const [hoveredData, setHoveredData] = useState<any>(null);
   const [clickedData, setClickedData] = useState<any>(null);
@@ -169,6 +173,7 @@ export function InteractiveNeuralPoints({
             data={point.originalData}
             onHover={handleHover}
             onClick={handleClick}
+            hoverScale={hoverScale}
           />
         ))}
 

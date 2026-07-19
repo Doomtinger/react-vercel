@@ -548,7 +548,7 @@ export function NeuralBackground() {
   );
 }
 
-// 增强的状态标签
+// 增强的状态标签（修复错位）
 export function StateLabels({
   getStateColor,
   selectedState
@@ -558,20 +558,6 @@ export function StateLabels({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const states = ['resting', 'memory', 'attention', 'emotional', 'cognitive_load'];
-
-  useFrame((state) => {
-    if (groupRef.current) {
-      const time = state.clock.getElapsedTime();
-
-      // 浮动效果
-      states.forEach((_, i) => {
-        const child = groupRef.current?.children[i];
-        if (child) {
-          child.position.y = (4 - i * 0.8) + Math.sin(time * 0.5 + i) * 0.05;
-        }
-      });
-    }
-  });
 
   return (
     <group ref={groupRef} position={[5, 4, 0]}>
@@ -588,7 +574,7 @@ export function StateLabels({
               rotationIntensity={0.3}
               floatIntensity={0.2}
             >
-              <Icosahedron args={[0.15, 1]}>
+              <Icosahedron args={[0.15, 1]} position={[0, 0, 0]}>
                 <MeshDistortMaterial
                   color={color}
                   transparent
@@ -602,7 +588,7 @@ export function StateLabels({
 
             {/* 光晕效果 */}
             {isSelected && (
-              <Sphere args={[0.25, 16, 16]}>
+              <Sphere args={[0.25, 16, 16]} position={[0, 0, 0]}>
                 <meshBasicMaterial
                   color={color}
                   transparent
@@ -612,12 +598,13 @@ export function StateLabels({
               </Sphere>
             )}
 
-            {/* 状态文字 */}
+            {/* 状态文字 - 修复位置 */}
             <Text
-              position={[0.4, y, 0]}
+              position={[0.4, 0, 0]}
               fontSize={0.35}
               color="white"
               anchorX="left"
+              anchorY="middle"
               outlineWidth={0.02}
               outlineColor="#000000"
             >

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Points, Line, Text, Sphere } from '@react-three/drei';
-import * as THREE from 'three';
+import { OrbitControls } from '@react-three/drei';
 import dynamic from 'next/dynamic';
+import { VisualizationQuestionnaire, VisualizationPreferences } from '@/components/neural-science/VisualizationQuestionnaire';
+import { generateVizParameters } from '@/components/neural-science/applyVisualizationPreferences';
 
 // 动态导入3D组件
 const NeuralStateVisualization = dynamic(
@@ -33,7 +34,7 @@ interface NeuralDataPoint {
 interface DimensionalityReduction {
   name: string;
   description: string;
-  project: (data: NeuralDataPoint[]) => { x: number; y: number; z: number; }[];
+  project: (data: NeuralDataPoint[]) => { x: number; y: number; z: number; originalData: NeuralDataPoint }[];
 }
 
 // 模拟高维神经数据生成器
@@ -97,7 +98,7 @@ class PCAReduction implements DimensionalityReduction {
   name = 'PCA (主成分分析)';
   description = '线性降维，保持全局结构，适合连续数据';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     if (data.length === 0) return [];
 
     // 计算特征矩阵
@@ -117,9 +118,6 @@ class PCAReduction implements DimensionalityReduction {
       f.map((val, i) => val - means[i])
     );
 
-    // 计算协方差矩阵（简化版，直接使用前几个特征的线性组合）
-    // 在实际应用中会使用完整的PCA算法
-
     // 这里使用前3个特征作为主成分（简化）
     return data.map((point, i) => {
       const f = centered[i];
@@ -127,7 +125,8 @@ class PCAReduction implements DimensionalityReduction {
       return {
         x: f[0] * 2 + f[1] * 0.5 + f[2] * 0.3,
         y: f[3] * 1.5 + f[4] * 1.2 + f[5] * 0.8,
-        z: f[6] * 1.8 + f[7] * 1.0 + f[8] * 0.6
+        z: f[6] * 1.8 + f[7] * 1.0 + f[8] * 0.6,
+        originalData: point // 保存原始数据
       };
     });
   }
@@ -138,7 +137,7 @@ class TSNEReduction implements DimensionalityReduction {
   name = 't-SNE (t-分布随机邻居嵌入)';
   description = '非线性降维，保持局部邻域结构，适合分离不同类别';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     // 简化的t-SNE模拟：按状态类别聚类
     const stateCenters: Record<string, {x: number; y: number; z: number}> = {
       'resting': { x: -3, y: 2, z: 0 },
@@ -181,7 +180,8 @@ class TSNEReduction implements DimensionalityReduction {
       return {
         x: center.x + trajectoryOffset.x + emotionOffset.x + (Math.random() - 0.5) * scatter,
         y: center.y + trajectoryOffset.y + emotionOffset.y + (Math.random() - 0.5) * scatter,
-        z: center.z + trajectoryOffset.z + emotionOffset.z + (Math.random() - 0.5) * scatter
+        z: center.z + trajectoryOffset.z + emotionOffset.z + (Math.random() - 0.5) * scatter,
+        originalData: point // 保存原始数据
       };
     });
   }
@@ -192,7 +192,7 @@ class UMAPReduction implements DimensionalityReduction {
   name = 'UMAP (均匀流形逼近与投影)';
   description = '非线性降维，平衡局部和全局结构，计算效率高';
 
-  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; }[] {
+  project(data: NeuralDataPoint[]): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
     // 模拟UMAP的流形结构保持特性
     return data.map((point, i) => {
       // 创建螺旋流形结构
@@ -222,14 +222,141 @@ class UMAPReduction implements DimensionalityReduction {
       return {
         x: Math.cos(angle + stateModifier) * radius,
         y: Math.sin(angle + stateModifier) * radius * 0.8,
-        z: (i * 0.05 - 2.5) + Math.sin(angle * 2) * 0.5
+        z: (i * 0.05 - 2.5) + Math.sin(angle * 2) * 0.5,
+        originalData: point
       };
     });
   }
 }
 
+// 新增：网络降维算法（网络结构）
+class NetworkReduction implements DimensionalityReduction {
+  name = 'Network (网络拓扑)';
+  description = '基于网络拓扑的空间分布，突出连接关系';
+
+  project(data: NeuralDataPoint[], seed: number = Math.random()): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
+    const random = this.seededRandom(seed);
+    const stateCenters: Record<string, {x: number; y: number; z: number}> = {
+      'resting': { x: (random() - 0.5) * 6, y: (random() - 0.5) * 6, z: (random() - 0.5) * 6 },
+      'memory': { x: (random() - 0.5) * 6 + 4, y: (random() - 0.5) * 6 - 2, z: (random() - 0.5) * 6 },
+      'attention': { x: (random() - 0.5) * 6 - 4, y: (random() - 0.5) * 6 + 2, z: (random() - 0.5) * 6 },
+      'emotional': { x: (random() - 0.5) * 6, y: (random() - 0.5) * 6 + 4, z: (random() - 0.5) * 6 - 2 },
+      'cognitive_load': { x: (random() - 0.5) * 6, y: (random() - 0.5) * 6 - 4, z: (random() - 0.5) * 6 + 2 }
+    };
+
+    return data.map((point, i) => {
+      const center = stateCenters[point.state] || { x: 0, y: 0, z: 0 };
+      const connectionStrength = random();
+      const networkOffset = {
+        x: Math.sin(i * 0.3) * 2 * connectionStrength,
+        y: Math.cos(i * 0.2) * 2 * connectionStrength,
+        z: Math.sin(i * 0.4) * 2 * connectionStrength
+      };
+
+      return {
+        x: center.x + networkOffset.x + (random() - 0.5) * 1.5,
+        y: center.y + networkOffset.y + (random() - 0.5) * 1.5,
+        z: center.z + networkOffset.z + (random() - 0.5) * 1.5,
+        originalData: point
+      };
+    });
+  }
+
+  private seededRandom(seed: number): () => number {
+    return () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+  }
+}
+
+// 新增：波浪降维算法
+class WaveReduction implements DimensionalityReduction {
+  name = 'Wave (波动模式)';
+  description = '基于波动方程的周期性空间分布';
+
+  project(data: NeuralDataPoint[], seed: number = Math.random()): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
+    const random = this.seededRandom(seed);
+
+    return data.map((point, i) => {
+      const waveFreq = 0.1 + random() * 0.1;
+      const waveAmplitude = 2 + random() * 2;
+      const phase = random() * Math.PI * 2;
+
+      const stateModifier = {
+        'resting': 1.0,
+        'memory': 1.5,
+        'attention': 2.0,
+        'emotional': 1.2,
+        'cognitive_load': 1.8
+      }[point.state] || 1.0;
+
+      return {
+        x: (i * 0.2 - 10) + Math.sin(i * waveFreq + phase) * waveAmplitude * 0.3,
+        y: Math.cos(i * waveFreq * stateModifier + phase) * waveAmplitude,
+        z: Math.sin(i * waveFreq * 0.5 + phase) * waveAmplitude * 0.5,
+        originalData: point
+      };
+    });
+  }
+
+  private seededRandom(seed: number): () => number {
+    return () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+  }
+}
+
+// 新增：星团降维算法
+class ClusterReduction implements DimensionalityReduction {
+  name = 'Cluster (星团聚集)';
+  description = '基于密度聚类的空间分布，突出群体特征';
+
+  project(data: NeuralDataPoint[], seed: number = Math.random()): { x: number; y: number; z: number; originalData: NeuralDataPoint }[] {
+    const random = this.seededRandom(seed);
+    const clusters: Record<string, {center: {x: number; y: number; z: number}, spread: number}> = {};
+
+    // 为每个状态创建簇中心和扩散度
+    ['resting', 'memory', 'attention', 'emotional', 'cognitive_load'].forEach(state => {
+      clusters[state] = {
+        center: {
+          x: (random() - 0.5) * 8,
+          y: (random() - 0.5) * 8,
+          z: (random() - 0.5) * 8
+        },
+        spread: 1 + random() * 2
+      };
+    });
+
+    return data.map((point, i) => {
+      const cluster = clusters[point.state] || clusters['resting'];
+      const gaussianRandom = () => {
+        let u = 0, v = 0;
+        while(u === 0) u = random(); //Converting [0,1) to (0,1)
+        while(v === 0) v = random();
+        return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+      };
+
+      return {
+        x: cluster.center.x + gaussianRandom() * cluster.spread,
+        y: cluster.center.y + gaussianRandom() * cluster.spread,
+        z: cluster.center.z + gaussianRandom() * cluster.spread,
+        originalData: point
+      };
+    });
+  }
+
+  private seededRandom(seed: number): () => number {
+    return () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+  }
+}
+
 type VisualizationMode = 'scatter' | 'trajectory' | 'flow_field';
-type ReductionMethod = 'pca' | 'tsne' | 'umap';
+type ReductionMethod = 'pca' | 'tsne' | 'umap' | 'network' | 'wave' | 'cluster';
 
 export default function NeuralStateSpacePage() {
   const [neuralData, setNeuralData] = useState<NeuralDataPoint[]>([]);
@@ -238,6 +365,47 @@ export default function NeuralStateSpacePage() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [patternSeed, setPatternSeed] = useState(1000); // 固定初始值避免 hydration 错误
+
+  // 问卷相关状态
+  const [showQuestionnaire, setShowQuestionnaire] = useState(true);
+  const [vizPreferences, setVizPreferences] = useState<VisualizationPreferences | null>(null);
+  const [vizParams, setVizParams] = useState<any>(null);
+
+  // 在客户端挂载后生成随机种子
+  useEffect(() => {
+    setPatternSeed(Math.floor(Math.random() * 10000));
+  }, []);
+
+  // 处理问卷完成
+  const handleQuestionnaireComplete = (preferences: VisualizationPreferences) => {
+    setVizPreferences(preferences);
+    setShowQuestionnaire(false);
+
+    // 生成可视化参数
+    const params = generateVizParameters(preferences);
+    setVizParams(params);
+
+    // 根据偏好设置默认参数
+    switch (preferences.visualStyle) {
+      case 'scientific':
+        setReductionMethod('pca');
+        break;
+      case 'artistic':
+        setReductionMethod('wave');
+        break;
+      case 'futuristic':
+        setReductionMethod('network');
+        break;
+    }
+
+    // 根据数据密度调整数据点数量
+    if (preferences.dataDensity !== 'moderate') {
+      const newDataCount = preferences.dataDensity === 'minimal' ? 60 : 200;
+      const data = generateNeuralData(newDataCount);
+      setNeuralData(data);
+    }
+  };
 
   // 生成模拟神经数据
   useEffect(() => {
@@ -260,6 +428,9 @@ export default function NeuralStateSpacePage() {
   const pcaReducer = new PCAReduction();
   const tsneReducer = new TSNEReduction();
   const umapReducer = new UMAPReduction();
+  const networkReducer = new NetworkReduction();
+  const waveReducer = new WaveReduction();
+  const clusterReducer = new ClusterReduction();
 
   const getReducer = (): DimensionalityReduction => {
     switch (reductionMethod) {
@@ -269,6 +440,12 @@ export default function NeuralStateSpacePage() {
         return tsneReducer;
       case 'umap':
         return umapReducer;
+      case 'network':
+        return networkReducer;
+      case 'wave':
+        return waveReducer;
+      case 'cluster':
+        return clusterReducer;
       default:
         return tsneReducer;
     }
@@ -277,8 +454,19 @@ export default function NeuralStateSpacePage() {
   // 执行降维
   const projectedData = useMemo(() => {
     if (neuralData.length === 0) return [];
-    return getReducer().project(neuralData);
-  }, [neuralData, reductionMethod]);
+
+    // 为新的算法传递种子
+    const reducer = getReducer();
+
+    // 检查是否是支持种子的新算法
+    if ('project' in reducer && reducer.constructor.name !== 'PCAReduction' &&
+        reducer.constructor.name !== 'TSNEReduction' && reducer.constructor.name !== 'UMAPReduction') {
+      // 新算法支持种子参数
+      return (reducer as any).project(neuralData, patternSeed);
+    }
+
+    return reducer.project(neuralData);
+  }, [neuralData, reductionMethod, patternSeed]);
 
   // 状态颜色映射
   const getStateColor = (state: string, emotion?: string): string => {
@@ -336,7 +524,23 @@ export default function NeuralStateSpacePage() {
   const stats = getStatistics();
 
   return (
-    <div className="h-screen flex bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950">
+    <>
+      {/* 问卷系统 */}
+      {showQuestionnaire && (
+        <VisualizationQuestionnaire onComplete={handleQuestionnaireComplete} />
+      )}
+
+      {/* 再次定制按钮 */}
+      {!showQuestionnaire && (
+        <button
+          onClick={() => setShowQuestionnaire(true)}
+          className="fixed top-4 right-4 z-40 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium shadow-lg"
+        >
+          🎨 重新定制
+        </button>
+      )}
+
+      <div className="h-screen flex bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950">
       {/* 左侧控制面板 */}
       <div className="w-[420px] bg-black/30 backdrop-blur-lg border-r border-white/10 p-5 overflow-y-auto">
         <div className="mb-6">
@@ -356,7 +560,10 @@ export default function NeuralStateSpacePage() {
             {[
               { id: 'tsne', name: 't-SNE', desc: 't-分布随机邻居嵌入 - 最适合类别分离' },
               { id: 'umap', name: 'UMAP', desc: '均匀流形逼近 - 计算效率高' },
-              { id: 'pca', name: 'PCA', desc: '主成分分析 - 保持全局结构' }
+              { id: 'pca', name: 'PCA', desc: '主成分分析 - 保持全局结构' },
+              { id: 'network', name: 'Network', desc: '网络拓扑 - 突出连接关系' },
+              { id: 'wave', name: 'Wave', desc: '波动模式 - 周期性空间分布' },
+              { id: 'cluster', name: 'Cluster', desc: '星团聚集 - 突出群体特征' }
             ].map((method) => (
               <button
                 key={method.id}
@@ -460,6 +667,22 @@ export default function NeuralStateSpacePage() {
           </div>
         </div>
 
+        {/* 图案生成控制 */}
+        <div className="mb-5 p-4 rounded-xl bg-white/10 border border-white/20">
+          <h3 className="text-sm font-semibold text-white mb-3">🎨 图案生成</h3>
+          <div className="space-y-3">
+            <button
+              onClick={() => setPatternSeed(Math.floor(Math.random() * 10000))}
+              className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium"
+            >
+              🎲 重新生成图案
+            </button>
+            <div className="text-xs text-gray-400">
+              当前种子: <span className="text-white font-medium">{patternSeed}</span> - 点击按钮生成新的随机图案
+            </div>
+          </div>
+        </div>
+
         {/* 统计信息 */}
         {stats && (
           <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30">
@@ -540,6 +763,7 @@ export default function NeuralStateSpacePage() {
                 currentTime={currentTime}
                 getStateColor={getStateColor}
                 isPlaying={isPlaying}
+                vizParams={vizParams}
               />
               <OrbitControls
                 enableZoom={true}
@@ -592,5 +816,6 @@ export default function NeuralStateSpacePage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

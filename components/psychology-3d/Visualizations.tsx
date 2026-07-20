@@ -2,10 +2,10 @@
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Sphere, MeshDistortMaterial, Trail } from '@react-three/drei';
+import { Sphere, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
-// 心流状态可视化 - 连续流动的球体
+// 心流状态可视化 - 连续流动的球体（移除Trail组件避免错误）
 export function FlowStateVisualization() {
   const spheres = useMemo(() => {
     return Array.from({ length: 8 }, (_, i) => ({
@@ -17,13 +17,16 @@ export function FlowStateVisualization() {
   }, []);
 
   const sphereRefs = useRef<THREE.Mesh[]>([]);
+  const trailRefs = useRef<THREE.Mesh[]>([]);
 
   useFrame((state) => {
+    const time = state.clock.elapsedTime;
+
     spheres.forEach((sphere, i) => {
       const mesh = sphereRefs.current[i];
       if (mesh) {
         // 螺旋运动
-        const angle = sphere.baseAngle + state.clock.elapsedTime * sphere.speed;
+        const angle = sphere.baseAngle + time * sphere.speed;
         const y = Math.sin(angle * 2) * 1.5;
         const x = Math.cos(angle) * sphere.radius;
         const z = Math.sin(angle) * sphere.radius;
@@ -32,6 +35,17 @@ export function FlowStateVisualization() {
         mesh.rotation.x += 0.02;
         mesh.rotation.y += 0.03;
       }
+
+      // 创建轨迹效果 - 用小球跟随主球
+      const trailMesh = trailRefs.current[i];
+      if (trailMesh && sphereRefs.current[i]) {
+        // 稍微延迟跟随
+        const delayAngle = sphere.baseAngle + time * sphere.speed - 0.3;
+        const trailY = Math.sin(delayAngle * 2) * 1.5;
+        const trailX = Math.cos(delayAngle) * sphere.radius;
+        const trailZ = Math.sin(delayAngle) * sphere.radius;
+        trailMesh.position.set(trailX, trailY, trailZ);
+      }
     });
   });
 
@@ -39,27 +53,37 @@ export function FlowStateVisualization() {
     <group>
       {spheres.map((sphere, i) => (
         <group key={sphere.id}>
-          <Trail
-            width={0.3}
-            color="#6BCB77"
-            attenuation={0.5}
-            length={8}
+          {/* 主球 */}
+          <Sphere
+            ref={(el) => {
+              if (el) sphereRefs.current[i] = el;
+            }}
+            args={[0.4, 16, 16]}
           >
-            <Sphere
-              ref={(el) => {
-                if (el) sphereRefs.current[i] = el;
-              }}
-              args={[0.4, 16, 16]}
-            >
-              <MeshDistortMaterial
-                color="#6BCB77"
-                distort={0.3}
-                speed={2}
-                emissive="#6BCB77"
-                emissiveIntensity={0.2}
-              />
-            </Sphere>
-          </Trail>
+            <MeshDistortMaterial
+              color="#6BCB77"
+              distort={0.3}
+              speed={2}
+              emissive="#6BCB77"
+              emissiveIntensity={0.2}
+            />
+          </Sphere>
+
+          {/* 轨迹球 - 替代Trail组件 */}
+          <Sphere
+            ref={(el) => {
+              if (el) trailRefs.current[i] = el;
+            }}
+            args={[0.2, 8, 8]}
+          >
+            <meshStandardMaterial
+              color="#6BCB77"
+              transparent
+              opacity={0.4}
+              emissive="#6BCB77"
+              emissiveIntensity={0.15}
+            />
+          </Sphere>
         </group>
       ))}
     </group>

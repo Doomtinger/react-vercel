@@ -8,12 +8,12 @@ import dynamic from 'next/dynamic';
 
 // 动态导入3D场景组件
 const HappyDreamScene = dynamic(
-  () => import('@/components/dream-emotion/HappyDreamScene').then(mod => ({ default: mod.HappyDreamScene })),
+  () => import('@/components/dream-emotion/HappyDreamScene'),
   { ssr: false }
 );
 
 const PainDreamScene = dynamic(
-  () => import('@/components/dream-emotion/PainDreamScene').then(mod => ({ default: mod.PainDreamScene })),
+  () => import('@/components/dream-emotion/PainDreamScene'),
   { ssr: false }
 );
 

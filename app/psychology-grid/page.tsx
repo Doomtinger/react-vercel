@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sky, Cloud, Stars, Float, Text, Sphere, Plane, MeshDistortMaterial, Circle } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import dynamic from 'next/dynamic';
 

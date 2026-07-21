@@ -412,6 +412,13 @@ export class PhysicsEngine {
       entity.physics.velocity.copy(velocity);
     }
   }
+
+  /**
+   * Get entity manager
+   */
+  getEntityManager(): EntityManager {
+    return this.entityManager;
+  }
 }
 
 export default PhysicsEngine;

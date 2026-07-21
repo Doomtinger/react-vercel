@@ -8,8 +8,6 @@ import * as THREE from 'three';
 // Core systems
 import { EntityManager } from './core/EntityManager';
 import { PhysicsEngine } from './core/PhysicsEngine';
-import { InteractionManager } from './core/InteractionManager';
-import { RenderSystem } from './core/RenderSystem';
 
 // Visualization modules
 import { MentalGalaxy } from './galaxy/GalaxyController';
@@ -64,7 +62,7 @@ const MentalUniverseUpdater: React.FC<MentalUniverseUpdaterProps> = ({
     if (now - lastFpsUpdate.current > 500) { // Update every 500ms
       const fps = Math.round(1 / delta);
       const reasoningLevel = activityDetector.getReasoningLevel();
-      const entityStats = physicsEngine.entityManager.getStats();
+      const entityStats = physicsEngine.getEntityManager().getStats();
       const totalEntities = Object.values(entityStats).reduce(
         (sum, stat: any) => sum + (stat.total || 0), 0
       );
@@ -119,7 +117,6 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
   // Initialize core systems
   const entityManager = useMemo(() => new EntityManager(), []);
   const physicsEngine = useMemo(() => new PhysicsEngine(entityManager), [entityManager]);
-  const renderSystem = useMemo(() => null, []); // Will be initialized with Three.js context
   const activityDetector = useMemo(() => new ActivityDetector(entityManager), [entityManager]);
   const networkLayout = useMemo(() => new NetworkLayout(entityManager), [entityManager]);
 
@@ -206,7 +203,7 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
         { name: 'Planning', type: EntityType.THOUGHT }
       ];
 
-      thoughts.forEach((thought, i) => {
+      thoughts.forEach((thought) => {
         const position = new THREE.Vector3(
           (Math.random() - 0.5) * 12,
           (Math.random() - 0.5) * 8,

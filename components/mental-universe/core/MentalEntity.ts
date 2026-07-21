@@ -216,7 +216,7 @@ export class MentalEntity {
 
     // Update material properties
     if (this.material && 'opacity' in this.material) {
-      const material = this.material as THREE.MaterialTransparent;
+      const material = this.material as any;
       // Combine certainty, lifecycle, and hover state
       material.opacity = this.state.certainty * this.visibility;
 
@@ -226,7 +226,7 @@ export class MentalEntity {
     }
   }
 
-  private getBaseScale(): number {
+  public getBaseScale(): number {
     switch (this.type) {
       case EntityType.SELF:
         return 2.0;

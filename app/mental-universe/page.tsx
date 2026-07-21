@@ -4,7 +4,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamic import to avoid SSR issues with Three.js
-const MentalUniverseClient = dynamic(
+const MentalUniverse = dynamic(
   () => import('@/components/mental-universe/MentalUniverse').then(mod => ({ default: mod.MentalUniverse })),
   {
     ssr: false,
@@ -34,7 +34,7 @@ export default function MentalUniversePage() {
   return (
     <main className="mental-universe-page">
       <div className="universe-container">
-        <MentalUniverseClient
+        <MentalUniverse
           enableGalaxy={config.enableGalaxy}
           enableEmotions={config.enableEmotions}
           enableMindGraph={config.enableMindGraph}

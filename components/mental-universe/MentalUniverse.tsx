@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Environment } from '@react-three/drei';
+import { OrbitControls, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Core systems
@@ -104,7 +104,6 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
   maxEntities = 200,
   aiReasoning = true
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hoveredEntity, setHoveredEntity] = useState<MentalEntity | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<MentalEntity | null>(null);
@@ -259,7 +258,6 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
   return (
     <div className={`mental-universe ${className}`}>
       <Canvas
-        ref={canvasRef}
         camera={{
           position: [20, 15, 20],
           fov: 50,
@@ -291,7 +289,6 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
           fade
           speed={1}
         />
-        <Environment preset="night" />
 
         {/* Frame updater */}
         <MentalUniverseUpdater

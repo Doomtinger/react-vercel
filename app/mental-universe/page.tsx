@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 
 // Dynamic import to avoid SSR issues with Three.js
 const MentalUniverse = dynamic(
-  () => import('@/components/mental-universe/MentalUniverse').then(mod => ({ default: mod.MentalUniverse })),
+  () => import('@/components/mental-universe/MentalUniverse').then(mod => mod.default),
   {
     ssr: false,
     loading: () => (

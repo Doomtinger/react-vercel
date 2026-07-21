@@ -93,6 +93,8 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
   const blobRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const morphSpeedRef = useRef(0);
+  const blobSizeRef = useRef(0);
 
   // Get emotion type from metadata
   const emotionType = useMemo(() => {
@@ -120,6 +122,18 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
     return baseSize * intensityScale * expansionScale;
   }, [entity.state.intensity, behavior.expansion]);
 
+  // Morph speed for material animation
+  const morphSpeed = useMemo(() => {
+    return behavior.morphSpeed * (1 + entity.state.activity);
+  }, [behavior.morphSpeed, entity.state.activity]);
+
+  // Update refs when values change
+  useEffect(() => {
+    const speed = behavior.morphSpeed * (1 + entity.state.activity);
+    morphSpeedRef.current = speed;
+    blobSizeRef.current = blobSize;
+  }, [behavior.morphSpeed, entity.state.activity, blobSize]);
+
   // Mesh gradient setup
   const gradientColors = useMemo(() => {
     const base = new THREE.Color(blobColor);
@@ -133,12 +147,13 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
     if (!blobRef.current || !groupRef.current) return;
 
     const time = state.clock.getElapsedTime();
-    const morphSpeed = behavior.morphSpeed * (1 + entity.state.activity);
+    const speed = morphSpeedRef.current;
+    const size = blobSizeRef.current;
 
     // Breathing with morphing
-    const breathPhase = time * morphSpeed;
+    const breathPhase = time * speed;
     const expansion = Math.sin(breathPhase) * behavior.expansion * 0.1;
-    const scale = blobSize * (1 + expansion);
+    const scale = size * (1 + expansion);
 
     blobRef.current.scale.setScalar(scale);
 
@@ -163,6 +178,7 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
 
     // Update glow
     if (glowRef.current) {
+      const size = blobSizeRef.current;
       glowRef.current.scale.setScalar(scale * 1.2);
       if (glowRef.current.material instanceof THREE.MeshBasicMaterial) {
         const glowIntensity = entity.state.intensity * 0.5;

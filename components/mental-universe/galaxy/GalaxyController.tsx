@@ -1,6 +1,6 @@
 import React, { useRef, useMemo, useEffect, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { MentalEntity, EntityType } from '../core/MentalEntity';
 import { EntityManager } from '../core/EntityManager';
@@ -150,16 +150,6 @@ export const GalaxyController: React.FC<GalaxyControllerProps> = ({
         {/* Ambient particle field */}
         <AmbientParticles activity={galaxyState.activityLevel} />
       </group>
-
-      {/* Camera controls */}
-      <OrbitControls
-        enableDamping
-        dampingFactor={0.05}
-        minDistance={10}
-        maxDistance={50}
-        maxPolarAngle={Math.PI / 1.5}
-        minPolarAngle={Math.PI / 6}
-      />
     </>
   );
 };
@@ -219,13 +209,11 @@ const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={particleCount}
-          array={positions}
+          args={[positions, 3]}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={particleCount}
-          array={colors}
+          args={[colors, 3]}
         />
       </bufferGeometry>
       <pointsMaterial
@@ -241,63 +229,19 @@ const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
 };
 
 /**
- * Main Mental Galaxy component with Canvas setup
+ * MentalGalaxy - Content component without Canvas (designed to be used inside a parent Canvas)
  */
-interface MentalGalaxyProps {
-  entityManager: EntityManager;
-  onEntitySelect?: (entity: MentalEntity) => void;
-  onEntityHover?: (entity: MentalEntity | null) => void;
-  className?: string;
-}
-
 export const MentalGalaxy: React.FC<MentalGalaxyProps> = ({
   entityManager,
   onEntitySelect,
-  onEntityHover,
-  className = ''
+  onEntityHover
 }) => {
   return (
-    <div className={`mental-galaxy-container ${className}`}>
-      <Canvas
-        camera={{
-          position: [20, 15, 20],
-          fov: 50,
-          near: 0.1,
-          far: 200
-        }}
-        gl={{
-          antialias: true,
-          alpha: true,
-          powerPreference: 'high-performance'
-        }}
-        dpr={[1, 2]} // Responsive pixel ratio
-        performance={{ min: 0.5 }} // Performance scaling
-      >
-        {/* Lighting */}
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={0.5} />
-        <pointLight position={[-10, -10, -10]} intensity={0.3} color="purple" />
-
-        {/* Background gradient */}
-        <color attach="background" args={['#0a0a0f']} />
-
-        {/* Galaxy controller */}
-        <GalaxyController
-          entityManager={entityManager}
-          onEntitySelect={onEntitySelect}
-          onEntityHover={onEntityHover}
-        />
-      </Canvas>
-
-      <style jsx>{`
-        .mental-galaxy-container {
-          width: 100%;
-          height: 100%;
-          position: relative;
-          background: radial-gradient(circle at center, #151520 0%, #0a0a0f 100%);
-        }
-      `}</style>
-    </div>
+    <GalaxyController
+      entityManager={entityManager}
+      onEntitySelect={onEntitySelect}
+      onEntityHover={onEntityHover}
+    />
   );
 };
 

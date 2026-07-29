@@ -3,33 +3,29 @@
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Sphere, MeshDistortMaterial, Stars, Grid, Torus, Icosahedron } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { EmotionType, emotionColorProfiles } from '@/lib/use-face-detection';
 
-// 情感核心球体 - 基于情感类型展现不同形态
+// 情感核心球体 - 优化版
 export function EmotionCore({ emotion, intensity }: { emotion: EmotionType; intensity: number }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const colorProfile = emotionColorProfiles[emotion];
 
-  // 根据情感类型设置不同的动态效果
   useFrame((state) => {
     if (meshRef.current) {
       const time = state.clock.elapsedTime;
 
-      // 不同的情感类型有不同的运动模式
       switch (emotion) {
         case 'happy':
-          // 快乐：轻快跳动、明亮扩张
           meshRef.current.rotation.y += 0.02 * intensity;
           meshRef.current.scale.setScalar(1 + Math.sin(time * 3) * 0.15 * intensity);
           break;
         case 'sad':
-          // 悲伤：缓慢下沉、收缩
           meshRef.current.position.y = Math.sin(time * 0.5) * 0.3 - 0.5;
           meshRef.current.scale.setScalar(0.8 + Math.sin(time * 1) * 0.1);
           break;
         case 'angry':
-          // 愤怒：急剧抖动、爆发式扩张
           meshRef.current.rotation.x += 0.05;
           meshRef.current.rotation.y += 0.08;
           meshRef.current.scale.setScalar(1 + Math.sin(time * 8) * 0.2 * intensity);
@@ -37,40 +33,35 @@ export function EmotionCore({ emotion, intensity }: { emotion: EmotionType; inte
           meshRef.current.position.y = Math.cos(time * 12) * 0.1;
           break;
         case 'fearful':
-          // 恐惧：颤抖、不稳定
           meshRef.current.position.x = Math.sin(time * 15) * 0.15 * intensity;
           meshRef.current.position.y = Math.cos(time * 18) * 0.15 * intensity;
           meshRef.current.scale.setScalar(0.9 + Math.sin(time * 20) * 0.1);
           break;
         case 'surprised':
-          // 惊讶：突然扩张、闪烁
           meshRef.current.scale.setScalar(1 + Math.sin(time * 6) * 0.25 * intensity);
           meshRef.current.rotation.z += 0.03;
           break;
         case 'disgusted':
-          // 厌恶：扭曲、收缩
           meshRef.current.rotation.x += 0.01;
           meshRef.current.scale.setScalar(0.7 + Math.sin(time * 2) * 0.05);
           break;
         default:
-          // 平静：温和脉动
           meshRef.current.rotation.y += 0.005;
           meshRef.current.scale.setScalar(1 + Math.sin(time * 1.5) * 0.08);
       }
     }
   });
 
-  // 根据情感类型选择不同的几何形态
   const getGeometry = () => {
     switch (emotion) {
       case 'angry':
-        return <Icosahedron args={[1.5, 1]} />; // 愤怒：尖锐的多面体
+        return <Icosahedron args={[1.5, 2]} />; // 增加细节
       case 'surprised':
-        return <Torus args={[1.2, 0.4, 16, 32]} />; // 惊讶：环形，表示震惊
+        return <Torus args={[1.2, 0.4, 32, 64]} />; // 提高细分度
       case 'fearful':
-        return <Icosahedron args={[1.3, 0]} />; // 恐惧：简单几何体，表示收缩
+        return <Icosahedron args={[1.3, 1]} />; // 增加细节
       default:
-        return <Sphere args={[1.5, 32, 32]} />; // 其他情感：球体
+        return <Sphere args={[1.5, 64, 64]} />; // 大幅提高细分度
     }
   };
 
@@ -81,18 +72,18 @@ export function EmotionCore({ emotion, intensity }: { emotion: EmotionType; inte
         color={colorProfile.primary}
         distort={0.2 + intensity * 0.4}
         speed={1 + intensity * 2}
-        roughness={emotion === 'angry' ? 0.1 : 0.3}
-        metalness={emotion === 'happy' ? 0.6 : 0.4}
+        roughness={emotion === 'angry' ? 0.15 : 0.35}
+        metalness={emotion === 'happy' ? 0.5 : 0.35}
         transparent
-        opacity={emotion === 'sad' ? 0.6 : 0.8}
+        opacity={emotion === 'sad' ? 0.65 : 0.85}
         emissive={colorProfile.glow}
-        emissiveIntensity={0.3 + intensity * 0.5}
+        emissiveIntensity={0.4 + intensity * 0.6}
       />
     </group>
   );
 }
 
-// 情感粒子系统 - 根据情感类型展现不同行为
+// 情感粒子系统 - 优化版
 export function EmotionParticles({ emotion, intensity, volatility }: {
   emotion: EmotionType;
   intensity: number;
@@ -101,7 +92,6 @@ export function EmotionParticles({ emotion, intensity, volatility }: {
   const groupRef = useRef<THREE.Group>(null);
   const colorProfile = emotionColorProfiles[emotion];
 
-  // 根据情感类型调整粒子数量和行为
   const particleConfig = useMemo(() => {
     switch (emotion) {
       case 'happy':
@@ -138,7 +128,6 @@ export function EmotionParticles({ emotion, intensity, volatility }: {
     if (groupRef.current) {
       const time = state.clock.elapsedTime;
 
-      // 不同的情感类型有不同的粒子运动模式
       const rotationSpeed = {
         happy: 0.003,
         sad: 0.001,
@@ -165,31 +154,25 @@ export function EmotionParticles({ emotion, intensity, volatility }: {
             disgusted: 0.6,
           }[emotion] || 1.0;
 
-          // 根据情感类型设置不同的运动模式
           let verticalOffset, horizontalOffset;
           switch (emotion) {
             case 'happy':
-              // 快乐：轻快上升运动
               verticalOffset = Math.sin(time * particle.baseSpeed * 1200 + particle.phase) * 0.8 * intensity;
               horizontalOffset = Math.cos(time * particle.baseSpeed * 1000 + particle.phase) * 0.4;
               break;
             case 'sad':
-              // 悲伤：下沉运动
               verticalOffset = -Math.abs(Math.sin(time * particle.baseSpeed * 500 + particle.phase)) * 0.3;
               horizontalOffset = Math.sin(time * particle.baseSpeed * 600 + particle.phase) * 0.2;
               break;
             case 'angry':
-              // 愤怒：爆发性运动
               verticalOffset = Math.sin(time * particle.baseSpeed * 2000 + particle.phase) * 1.2 * intensity;
               horizontalOffset = Math.cos(time * particle.baseSpeed * 1800 + particle.phase) * 0.8;
               break;
             case 'fearful':
-              // 恐惧：颤抖运动
               verticalOffset = Math.sin(time * particle.baseSpeed * 2500 + particle.phase) * 0.4 * intensity;
               horizontalOffset = Math.cos(time * particle.baseSpeed * 2200 + particle.phase) * 0.3;
               break;
             default:
-              // 其他情感：平滑运动
               verticalOffset = Math.sin(time * particle.baseSpeed * 1000 + particle.phase) * 0.5 * intensity;
               horizontalOffset = Math.cos(time * particle.baseSpeed * 800 + particle.phase) * 0.3;
           }
@@ -210,14 +193,18 @@ export function EmotionParticles({ emotion, intensity, volatility }: {
         <Sphere
           key={particle.id}
           position={particle.basePosition}
-          args={[particle.radius, 8, 8]}
+          args={[particle.radius, 32, 32]} // 提高细分度
         >
-          <meshStandardMaterial
+          <meshPhysicalMaterial // 升级到物理材质
             color={particleConfig.color[particle.colorIndex]}
+            roughness={0.4}
+            metalness={0.3}
             transparent
-            opacity={emotion === 'sad' ? 0.4 : 0.6}
+            opacity={emotion === 'sad' ? 0.45 : 0.65}
             emissive={particleConfig.color[particle.colorIndex]}
-            emissiveIntensity={0.2 + intensity * 0.3}
+            emissiveIntensity={0.3 + intensity * 0.4}
+            clearcoat={0.4}
+            envMapIntensity={0.6}
           />
         </Sphere>
       ))}
@@ -225,7 +212,7 @@ export function EmotionParticles({ emotion, intensity, volatility }: {
   );
 }
 
-// 情感轨迹 - 展现情感历史变化
+// 情感轨迹 - 优化版
 export function EmotionTrail({
   emotions,
   currentEmotion
@@ -234,7 +221,7 @@ export function EmotionTrail({
   currentEmotion: EmotionType;
 }) {
   const trailRef = useRef<THREE.Group>(null);
-  const recentEmotions = emotions.slice(-15); // 增加轨迹长度
+  const recentEmotions = emotions.slice(-15);
   const currentTime = Date.now();
 
   useFrame(() => {
@@ -247,10 +234,10 @@ export function EmotionTrail({
     <group ref={trailRef}>
       {recentEmotions.map((data, i) => {
         const age = currentTime - data.timestamp;
-        const opacity = Math.max(0, 1 - age / 15000); // 延长淡出时间
+        const opacity = Math.max(0, 1 - age / 15000);
         const scale = 0.3 + (i / recentEmotions.length) * 0.7;
         const angle = (i / recentEmotions.length) * Math.PI * 2;
-        const radius = 4 + (i / recentEmotions.length) * 2; // 渐开线模式
+        const radius = 4 + (i / recentEmotions.length) * 2;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
         const y = (i / recentEmotions.length) * 3 - 1.5;
@@ -258,15 +245,15 @@ export function EmotionTrail({
         const emotionProfile = emotionColorProfiles[data.emotion];
 
         return (
-          <Sphere key={`${data.timestamp}-${i}`} position={[x, y, z]} args={[scale, 8, 8]}>
+          <Sphere key={`${data.timestamp}-${i}`} position={[x, y, z]} args={[scale, 32, 32]}>
             <MeshDistortMaterial
               color={emotionProfile.primary}
               distort={0.2}
               speed={1}
               transparent
-              opacity={opacity * 0.6}
+              opacity={opacity * 0.65}
               emissive={emotionProfile.glow}
-              emissiveIntensity={0.3}
+              emissiveIntensity={0.35}
             />
           </Sphere>
         );
@@ -275,7 +262,7 @@ export function EmotionTrail({
   );
 }
 
-// 心流场 - 根据情感类型展现不同流动模式
+// 心流场 - 优化版
 export function FlowField({
   currentEmotion,
   intensity,
@@ -288,7 +275,6 @@ export function FlowField({
   const groupRef = useRef<THREE.Group>(null);
   const colorProfile = emotionColorProfiles[currentEmotion];
 
-  // 根据情感类型调整流动场的参数
   const fieldConfig = useMemo(() => {
     switch (currentEmotion) {
       case 'happy':
@@ -325,10 +311,9 @@ export function FlowField({
         if (child instanceof THREE.Mesh && spheres[i]) {
           const sphere = spheres[i];
 
-          // 根据情感类型设置不同的运动模式
           let angle, x, y, z;
           switch (fieldConfig.pattern) {
-            case 'expanding': // 快乐：扩张运动
+            case 'expanding':
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed * intensity;
               const expandRadius = sphere.radius * (1 + Math.sin(time) * 0.3);
               x = Math.cos(angle) * expandRadius;
@@ -336,14 +321,14 @@ export function FlowField({
               y = sphere.verticalOffset + Math.sin(time * 2 + sphere.baseAngle) * 0.5;
               break;
 
-            case 'sinking': // 悲伤：下沉运动
+            case 'sinking':
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed * 0.5;
               x = Math.cos(angle) * sphere.radius;
               z = Math.sin(angle) * sphere.radius;
               y = sphere.verticalOffset - Math.abs(Math.sin(time * 0.5)) * 2;
               break;
 
-            case 'explosive': // 愤怒：爆发运动
+            case 'explosive':
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed * intensity * 1.5;
               const explosiveRadius = sphere.radius * (1 + Math.sin(time * 3) * 0.5 * intensity);
               x = Math.cos(angle) * explosiveRadius;
@@ -351,14 +336,14 @@ export function FlowField({
               y = sphere.verticalOffset + Math.sin(time * 4 + sphere.baseAngle) * volatility * 2;
               break;
 
-            case 'trembling': // 恐惧：颤抖运动
+            case 'trembling':
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed;
               x = Math.cos(angle) * sphere.radius + Math.sin(time * 10) * 0.3;
               z = Math.sin(angle) * sphere.radius + Math.cos(time * 12) * 0.3;
               y = sphere.verticalOffset + Math.sin(time * 8) * 0.2;
               break;
 
-            case 'burst': // 惊讶：突发运动
+            case 'burst':
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed;
               const burstRadius = sphere.radius * (1 + (Math.sin(time * 6) > 0.8 ? 0.4 : 0));
               x = Math.cos(angle) * burstRadius;
@@ -366,7 +351,7 @@ export function FlowField({
               y = sphere.verticalOffset + Math.cos(time * 5 + sphere.baseAngle) * 0.8;
               break;
 
-            default: // 平滑运动
+            default:
               angle = sphere.baseAngle + time * sphere.speed * fieldConfig.speed;
               x = Math.cos(angle) * sphere.radius;
               z = Math.sin(angle) * sphere.radius;
@@ -384,15 +369,19 @@ export function FlowField({
   return (
     <group ref={groupRef}>
       {spheres.map((sphere) => (
-        <Sphere key={sphere.id} args={[0.3, 8, 8]}>
-          <MeshDistortMaterial
+        <Sphere key={sphere.id} args={[0.3, 32, 32]}>
+          <meshPhysicalMaterial // 升级到物理材质
             color={colorProfile.gradient[sphere.colorIndex % colorProfile.gradient.length]}
+            roughness={0.35}
+            metalness={0.4}
             distort={0.2 + intensity * 0.3}
             speed={1 + fieldConfig.speed}
             emissive={colorProfile.glow}
-            emissiveIntensity={0.3 + intensity * 0.4}
+            emissiveIntensity={0.35 + intensity * 0.45}
             transparent
-            opacity={currentEmotion === 'sad' ? 0.5 : 0.7}
+            opacity={currentEmotion === 'sad' ? 0.55 : 0.75}
+            clearcoat={0.5}
+            envMapIntensity={0.7}
           />
         </Sphere>
       ))}
@@ -400,11 +389,10 @@ export function FlowField({
   );
 }
 
-// 格子背景 - 根据情感类型调整
+// 格子背景 - 优化版
 function EmotionGridBackground({ emotion, intensity }: { emotion: EmotionType; intensity: number }) {
   const colorProfile = emotionColorProfiles[emotion];
 
-  // 根据情感类型调整格子参数
   const gridConfig = {
     angry: { cellSize: 1.2, speed: 2.0, opacity: 0.3 },
     happy: { cellSize: 1.5, speed: 1.2, opacity: 0.15 },
@@ -417,14 +405,13 @@ function EmotionGridBackground({ emotion, intensity }: { emotion: EmotionType; i
 
   return (
     <group>
-      {/* 底部格子 */}
       <Grid
         args={[20, 20]}
         cellSize={gridConfig.cellSize}
-        cellThickness={0.05}
+        cellThickness={0.06}
         cellColor={colorProfile.secondary}
         sectionSize={5}
-        sectionThickness={0.1}
+        sectionThickness={0.12}
         sectionColor={colorProfile.primary}
         fadeDistance={15}
         fadeStrength={1}
@@ -433,11 +420,10 @@ function EmotionGridBackground({ emotion, intensity }: { emotion: EmotionType; i
         infiniteGrid
       />
 
-      {/* 背景格子 - 增加空间感 */}
       <Grid
         args={[15, 15]}
         cellSize={gridConfig.cellSize * 0.8}
-        cellThickness={0.03}
+        cellThickness={0.04}
         cellColor={colorProfile.glow}
         sectionSize={5}
         sectionThickness={0.08}
@@ -451,7 +437,7 @@ function EmotionGridBackground({ emotion, intensity }: { emotion: EmotionType; i
   );
 }
 
-// 综合情感可视化场景
+// 综合情感可视化场景 - 优化版
 export function EmotionVisualizationScene({
   currentEmotion,
   intensity,
@@ -504,18 +490,39 @@ export function EmotionVisualizationScene({
         currentEmotion={currentEmotion}
       />
 
-      {/* 添加环境光和点光源增强情感氛围 */}
-      <ambientLight intensity={0.3} />
+      {/* 优化的照明系统 */}
+      <ambientLight intensity={0.35} />
       <pointLight
         position={[10, 10, 5]}
-        intensity={0.5}
+        intensity={0.55}
         color={colorProfile.primary}
+        distance={20}
+        decay={2}
       />
       <pointLight
         position={[-10, -10, -5]}
-        intensity={0.3}
+        intensity={0.35}
         color={colorProfile.secondary}
+        distance={18}
+        decay={2}
       />
+      <pointLight
+        position={[0, 8, 8]}
+        intensity={0.25}
+        color={colorProfile.glow}
+        distance={15}
+        decay={2}
+      />
+
+      {/* Bloom后处理效果 */}
+      <EffectComposer>
+        <Bloom
+          intensity={1.4}
+          luminanceThreshold={0.2}
+          luminanceSmoothing={0.9}
+          radius={0.8}
+        />
+      </EffectComposer>
     </>
   );
 }

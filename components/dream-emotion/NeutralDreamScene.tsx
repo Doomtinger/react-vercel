@@ -172,7 +172,7 @@ export default function NeutralDreamScene({ config }: { config?: any }) {
         </Sphere>
 
         {/* 优化的树木1 */}
-        <Cylinder position={[4, 1.5 * treeSize, 3]} args={[0.4, 0.5, 10 * treeSize], 24}>
+        <Cylinder position={[4, 1.5 * treeSize, 3]} args={[0.4, 0.5, 10 * treeSize, 24]}>
           <meshPhysicalMaterial
             color="#8B7355"
             roughness={0.9}
@@ -198,7 +198,7 @@ export default function NeutralDreamScene({ config }: { config?: any }) {
         </Sphere>
 
         {/* 优化的树木2 */}
-        <Cylinder position={[-5, 1.2 * treeSize, -4]} args={[0.35, 0.45, 8 * treeSize], 20}>
+        <Cylinder position={[-5, 1.2 * treeSize, -4]} args={[0.35, 0.45, 8 * treeSize, 20]}>
           <meshPhysicalMaterial
             color="#8B7355"
             roughness={0.9}
@@ -224,7 +224,7 @@ export default function NeutralDreamScene({ config }: { config?: any }) {
         </Sphere>
 
         {/* 优化的树木3 */}
-        <Cylinder position={[2, 1.0 * treeSize, -6]} args={[0.3, 0.4, 7 * treeSize], 18}>
+        <Cylinder position={[2, 1.0 * treeSize, -6]} args={[0.3, 0.4, 7 * treeSize, 18]}>
           <meshPhysicalMaterial
             color="#8B7355"
             roughness={0.9}
@@ -254,7 +254,7 @@ export default function NeutralDreamScene({ config }: { config?: any }) {
           <Cylinder
             key={`grass-${i}`}
             position={grass.position}
-            args={[0.05, 0.02, grass.height], 8}
+            args={[0.05, 0.02, grass.height]}
             userData={{ isGrass: true, grass }}
           >
             <meshPhysicalMaterial

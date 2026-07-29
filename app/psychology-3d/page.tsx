@@ -1,8 +1,8 @@
 'use client';
 
+import { Canvas } from '@react-three/fiber';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 
 // 动态导入3D组件，避免SSR问题

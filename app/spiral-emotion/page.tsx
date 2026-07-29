@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { SpiralEmotionScene, SpiralEmotionConfig, emotionPresets, SpiralIntensity } from '@/components/psychology-3d/SpiralEmotion';
 import dynamic from 'next/dynamic';
 
@@ -459,18 +459,6 @@ export default function SpiralEmotionPage() {
                 {/* 场景内容 */}
                 <Suspense fallback={null}>
                   <SpiralScene config={spiralConfig} />
-
-                  {/* 环境映射 - 基于 threejs-impl-lighting */}
-                  <Environment preset="night" blur={0.8} />
-
-                  {/* 接触阴影 - 增强真实感 */}
-                  <ContactShadows
-                    position={[0, -2, 0]}
-                    opacity={0.4}
-                    scale={10}
-                    blur={2}
-                    far={4}
-                  />
                 </Suspense>
 
                 {/* 优化的控制器 */}

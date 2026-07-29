@@ -2,7 +2,7 @@
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Sphere, Line, Cylinder, Grid } from '@react-three/drei';
+import { Cylinder, Sphere, Torus } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
@@ -30,13 +30,13 @@ export interface SpiralEmotionConfig {
 export const emotionPresets: Record<SpiralIntensity, SpiralEmotionConfig> = {
   mild: {
     intensity: 'mild',
-    cycleCount: 2.5,
-    tightness: 0.3,
+    cycleCount: 3.5,    // 轻度：3-4圈宽松大螺旋
+    tightness: 0.3,     // 较宽松
     direction: 'inward',
     colors: {
-      primary: '#9B8CBF',
-      secondary: '#A8B5D6',
-      accent: '#C4B5D9',
+      primary: '#9B8CBF',    // 浅紫灰
+      secondary: '#A8B5D6',  // 灰蓝
+      accent: '#C4B5D9',     // 淡紫
       glow: '#B8A8C9'
     },
     hasSpikes: false,
@@ -49,9 +49,9 @@ export const emotionPresets: Record<SpiralIntensity, SpiralEmotionConfig> = {
     tightness: 0.7,
     direction: 'inward',
     colors: {
-      primary: '#6B5B7F',
-      secondary: '#5B6B8A',
-      accent: '#8B7BA0',
+      primary: '#6B5B7F',    // 暗紫
+      secondary: '#5B6B8A',  // 灰蓝
+      accent: '#8B7BA0',     // 中紫
       glow: '#7A6A8F'
     },
     hasSpikes: true,
@@ -64,9 +64,9 @@ export const emotionPresets: Record<SpiralIntensity, SpiralEmotionConfig> = {
     tightness: 0.95,
     direction: 'inward',
     colors: {
-      primary: '#4A3A5F',
-      secondary: '#3A4A6A',
-      accent: '#8B2A4A',
+      primary: '#4A3A5F',    // 深灰紫
+      secondary: '#3A4A6A',  // 深灰蓝
+      accent: '#8B2A4A',     // 暗红
       glow: '#5A4A6F'
     },
     hasSpikes: true,
@@ -75,348 +75,360 @@ export const emotionPresets: Record<SpiralIntensity, SpiralEmotionConfig> = {
   }
 };
 
-// 生成螺旋路径点 - 螺旋楼梯效果
-function generateSpiralPoints(config: SpiralEmotionConfig): THREE.Vector3[] {
-  const points: THREE.Vector3[] = [];
-  const { cycleCount, tightness, hasSpikes, hasFractures } = config;
+// 旋转楼梯式螺旋生成函数
+function generateSpiralStairs(config: SpiralEmotionConfig) {
+  const stairs = [];
+  const { cycleCount, tightness, intensity } = config;
 
-  const segments = Math.floor(cycleCount * 60); // 增加点数让曲线更平滑
+  // 每层的台阶数量（根据情绪强度调整）
+  const stepsPerLayer = intensity === 'mild' ? 24 : intensity === 'moderate' ? 36 : 48;
+  const totalSteps = Math.floor(cycleCount * stepsPerLayer);
 
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const angle = t * cycleCount * Math.PI * 2;
+  for (let i = 0; i < totalSteps; i++) {
+    const progress = i / totalSteps;
+    const angle = progress * Math.PI * 2 * cycleCount;
 
-    // 基础半径 - 从外向内收缩
-    const baseRadius = 5 * (1 - t * tightness);
+    // 旋转楼梯式高度变化 - 每一圈上升
+    const baseHeight = progress * 8;
+    const wobbleHeight = Math.sin(angle * 2) * 0.3;
+    const y = baseHeight + wobbleHeight;
 
-    // 尖角效果
-    const spike = hasSpikes && Math.sin(angle * 4) > 0.7 ? 0.25 : 0;
+    // 半径收缩 - 从外向内
+    const baseRadius = 6 * (1 - progress * tightness);
+    const radiusVar = Math.sin(angle * 3) * 0.3 * (intensity === 'severe' ? 1.5 : 1);
+    const radius = baseRadius + radiusVar;
 
-    // 断裂效果
-    const fracture = hasFractures && i % 30 < 2;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
 
-    if (!fracture) {
-      const radius = baseRadius + spike;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
+    // 每个台阶的配置
+    const stepSize = 0.8 + Math.random() * 0.4;
+    const stepHeight = 0.15 + Math.random() * 0.1;
+    const stepDepth = 0.3 + Math.random() * 0.2;
 
-      // 螺旋楼梯效果
-      const stairHeight = t * cycleCount * 0.8;
-      const wobble = Math.sin(angle * 2) * 0.15;
-      const z = stairHeight + wobble - 2;
-
-      points.push(new THREE.Vector3(x, y, z));
-    }
+    stairs.push({
+      position: [x, y, z],
+      rotation: [0, angle, 0],
+      size: stepSize,
+      height: stepHeight,
+      depth: stepDepth,
+      layer: i % 2 // 0=内层, 1=外层
+    });
   }
 
-  return points;
+  return stairs;
 }
 
-// 螺旋楼梯的支撑柱 - 优化版
-function SpiralStairSupports({ points, color }: { points: THREE.Vector3[]; color: string }) {
-  const supports = useMemo(() => {
-    const step = 18;
-    return points.filter((_, i) => i % step === 0);
-  }, [points]);
+// 中心立柱组件
+function CenterColumn({ config }: { config: SpiralEmotionConfig }) {
+  const colorProfile = emotionColorProfiles[config.intensity];
 
   return (
-    <>
-      {supports.map((point, i) => (
-        <Cylinder
-          key={`support-${i}`}
-          position={[point.x, point.y, -2]}
-          args={[0.04, 0.04, point.z + 2, 16]} // 增加细分度
-        >
-          <meshPhysicalMaterial
-            color={color}
-            transparent
-            opacity={0.5}
-            roughness={0.6}
-            metalness={0.2}
-            clearcoat={0.3}
-            envMapIntensity={0.5}
-          />
-        </Cylinder>
-      ))}
-    </>
-  );
-}
-
-// 主螺旋组件 - 优化版
-export function SpiralVisualization({ config }: { config: SpiralEmotionConfig }) {
-  const spiralRef = useRef<THREE.Group>(null);
-
-  // 生成主螺旋点
-  const mainPoints = useMemo(() => generateSpiralPoints(config), [config]);
-
-  // 生成副螺旋点（复合情绪）
-  const secondaryPoints = useMemo(() => {
-    if (config.secondaryEmotions.length === 0) return [];
-    const points = generateSpiralPoints(config);
-    return points.map(p => new THREE.Vector3(p.x * 0.85, p.y * 0.85, p.z));
-  }, [config]);
-
-  // 生成攻击线条点
-  const attackPoints = useMemo(() => {
-    if (config.intensity !== 'severe') return [];
-    const points = generateSpiralPoints(config);
-    return points.filter((_, i) => i % 4 === 0);
-  }, [config]);
-
-  useFrame((state) => {
-    if (spiralRef.current) {
-      if (config.intensity === 'mild') {
-        spiralRef.current.rotation.z = state.clock.elapsedTime * 0.1;
-      } else if (config.intensity === 'moderate') {
-        const pulse = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.05;
-        spiralRef.current.scale.set(pulse, pulse, 1);
-        spiralRef.current.rotation.z = state.clock.elapsedTime * 0.15;
-      } else {
-        spiralRef.current.rotation.z = state.clock.elapsedTime * 0.2;
-        const tightPulse = 1 - Math.sin(state.clock.elapsedTime * 4) * 0.03;
-        spiralRef.current.scale.set(tightPulse, tightPulse, 1);
-        spiralRef.current.position.x = Math.sin(state.clock.elapsedTime * 15) * 0.03;
-        spiralRef.current.position.y = Math.cos(state.clock.elapsedTime * 15) * 0.03;
-      }
-    }
-  });
-
-  // 根据强度调整发光强度
-  const glowIntensity = config.intensity === 'mild' ? 0.4 :
-                       config.intensity === 'moderate' ? 0.6 : 0.8;
-
-  return (
-    <group ref={spiralRef}>
-      {/* 螺旋楼梯的支撑柱 */}
-      <SpiralStairSupports points={mainPoints} color={config.colors.secondary} />
-
-      {/* 主螺旋 - 使用高质量球体 */}
-      {mainPoints.map((point, i) => (
-        <Sphere
-          key={`main-${i}`}
-          position={point}
-          args={[0.15, 48, 48]} // 提高细分度
-        >
-          <meshPhysicalMaterial
-            color={config.colors.primary}
-            roughness={0.4}
-            metalness={0.3}
-            transparent
-            opacity={0.92}
-            emissive={config.colors.glow}
-            emissiveIntensity={glowIntensity}
-            clearcoat={0.6}
-            clearcoatRoughness={0.2}
-            envMapIntensity={0.7}
-            transmission={0.1}
-            thickness={0.3}
-          />
-        </Sphere>
-      ))}
-
-      {/* 附着螺旋（复合情绪）- 优化材质 */}
-      {secondaryPoints.map((point, i) => (
-        <Sphere
-          key={`sec-${i}`}
-          position={point}
-          args={[0.10, 42, 42]} // 提高细分度
-        >
-          <meshPhysicalMaterial
-            color={config.colors.secondary}
-            roughness={0.5}
-            metalness={0.2}
-            transparent
-            opacity={0.75}
-            emissive={config.colors.glow}
-            emissiveIntensity={0.3}
-            clearcoat={0.4}
-            envMapIntensity={0.5}
-          />
-        </Sphere>
-      ))}
-
-      {/* 暗红线条（自我攻击）- 使用TubeGeometry获得更好的效果 */}
-      {attackPoints.length > 1 && (
-        <Line
-          points={attackPoints}
-          color={config.colors.accent}
-          lineWidth={6}
+    <group>
+      {/* 主立柱 - 渐变银蓝 */}
+      <Cylinder
+        args={[0.3, 0.4, 12, 32]}
+        position={[0, 6, 0]}
+      >
+        <meshPhysicalMaterial
+          color={colorProfile.column}
+          roughness={0.2}
+          metalness={0.8}
           transparent
-          opacity={0.9}
+          opacity={0.6}
+          emissive={colorProfile.column}
+          emissiveIntensity={0.4}
+          clearcoat={1.0}
+          envMapIntensity={1.0}
+          transmission={0.2}
         />
-      )}
+      </Cylinder>
 
-      {/* 添加一些漂浮的情绪粒子 */}
-      {config.intensity !== 'mild' && Array.from({ length: 15 }, (_, i) => (
-        <Sphere
-          key={`particle-${i}`}
-          position={[
-            (Math.random() - 0.5) * 6,
-            (Math.random() - 0.5) * 6,
-            Math.random() * 3
-          ]}
-          args={[0.05 + Math.random() * 0.08, 32, 32]}
-        >
-          <meshPhysicalMaterial
-            color={config.intensity === 'severe' ? config.colors.accent : config.colors.secondary}
-            roughness={0.6}
-            metalness={0.2}
-            transparent
-            opacity={0.4 + Math.random() * 0.3}
-            emissive={config.colors.glow}
-            emissiveIntensity={0.2 + Math.random() * 0.3}
-          />
-        </Sphere>
-      ))}
+      {/* 立柱顶部发光装饰 */}
+      <Sphere
+        args={[0.6, 32, 32]}
+        position={[0, 12.3, 0]}
+      >
+        <meshPhysicalMaterial
+          color={colorProfile.glow}
+          roughness={0.3}
+          metalness={0.5}
+          emissive={colorProfile.glow}
+          emissiveIntensity={1.5}
+          transparent
+          opacity={0.8}
+        />
+      </Sphere>
     </group>
   );
 }
 
-// 氛围云雾（压抑情绪）- 优化版
-export function FogCloud({ intensity, config }: { intensity: SpiralIntensity; config: SpiralEmotionConfig }) {
-  const cloudRef = useRef<THREE.Group>(null);
+// 单个台阶组件 - 真实楼梯质感
+function SpiralStair({ step, config, layer }: {
+  step: any;
+  config: SpiralEmotionConfig;
+  layer: number;
+}) {
+  const stepRef = useRef<THREE.Group>(null);
+  const colorProfile = emotionColorProfiles[config.intensity];
+
+  // 根据层级选择配色
+  const layerColors = layer === 0
+    ? [colorProfile.innerLayer, colorProfile.innerLayer2] // 内层：粉橙系
+    : [colorProfile.outerLayer, colorProfile.outerLayer2]; // 外层：绿蓝紫系
 
   useFrame((state) => {
-    if (cloudRef.current) {
-      cloudRef.current.rotation.z = state.clock.elapsedTime * 0.02;
-      // 动态雾的透明度
-      cloudRef.current.children.forEach((child, i) => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhysicalMaterial) {
-          const baseOpacity = intensity === 'severe' ? 0.12 : 0.08;
-          child.material.opacity = baseOpacity + Math.sin(state.clock.elapsedTime + i) * 0.02;
+    if (stepRef.current) {
+      // 微微的浮动动画，让楼梯看起来更有生机
+      const floatOffset = Math.sin(state.clock.elapsedTime + step.position[1]) * 0.05;
+      stepRef.current.position.y = step.position[1] + floatOffset;
+    }
+  });
+
+  const stairWidth = step.size;
+  const stairHeight = step.height;
+  const stairDepth = step.depth;
+
+  return (
+    <group ref={stepRef} position={step.position} rotation={step.rotation}>
+      {/* 台阶踏面 */}
+      <Cylinder
+        args={[stairWidth * 0.4, stairWidth * 0.4, stairHeight * 0.3, 24]}
+        position={[0, stairHeight * 0.15, stairDepth * 0.2]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
+        <meshPhysicalMaterial
+          color={layerColors[0]}
+          roughness={0.3}
+          metalness={0.4}
+          transparent
+          opacity={0.85}
+          emissive={layerColors[0]}
+          emissiveIntensity={0.2 + Math.random() * 0.3}
+          clearcoat={0.6}
+        />
+      </Cylinder>
+
+      {/* 护栏 */}
+      <Torus
+        args={[stairWidth * 0.35, stairHeight * 0.15, 8, 24]}
+        position={[0, stairHeight * 0.3, stairDepth * 0.35]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
+        <meshPhysicalMaterial
+          color="#FFFFFF"
+          roughness={0.7}
+          metalness={0.1}
+          transparent
+          opacity={0.3}
+          emissive="#FFFFFF"
+          emissiveIntensity={0.5}
+        />
+      </Torus>
+
+      {/* 侧边装饰 */}
+      <Sphere
+        args={[stairHeight * 0.12, 16, 16]}
+        position={[stairWidth * 0.3, stairHeight * 0.25, stairDepth * 0.4]}
+      >
+        <meshPhysicalMaterial
+          color={layerColors[1]}
+          roughness={0.4}
+          metalness={0.3}
+          emissive={layerColors[1]}
+          emissiveIntensity={0.4}
+          transparent
+          opacity={0.7}
+        />
+      </Sphere>
+    </group>
+  );
+}
+
+// 螺旋粒子系统 - 填充空隙，增强层次感
+function SpiralParticles({ config }: { config: SpiralEmotionConfig }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const colorProfile = emotionColorProfiles[config.intensity];
+
+  const particles = useMemo(() => {
+    const count = 60;
+    return Array.from({ length: count }, (_, i) => ({
+      position: [
+        (Math.random() - 0.5) * 10,
+        Math.random() * 10,
+        (Math.random() - 0.5) * 10
+      ],
+      basePosition: [
+        (Math.random() - 0.5) * 10,
+        Math.random() * 10,
+        (Math.random() - 0.5) * 10
+      ],
+      speed: 0.5 + Math.random() * 0.5,
+      phase: Math.random() * Math.PI * 2,
+      size: 0.05 + Math.random() * 0.1,
+      color: [
+        colorProfile.innerLayer,
+        colorProfile.outerLayer,
+        colorProfile.accent,
+        '#FFD700',
+        '#FFFFFF'
+      ][Math.floor(Math.random() * 5)]
+    }));
+  }, [config, colorProfile]);
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      const time = state.clock.elapsedTime;
+
+      groupRef.current.rotation.y += 0.002;
+
+      groupRef.current.children.forEach((child: any, i: number) => {
+        if (child.type === 'Mesh' && particles[i]) {
+          const particle = particles[i];
+          // 顺着螺旋轨迹流动
+          const spiralMotion = time * 0.5 + particle.phase;
+          child.position.x = particle.basePosition[0] + Math.cos(spiralMotion) * 0.5;
+          child.position.z = particle.basePosition[2] + Math.sin(spiralMotion) * 0.5;
+          child.position.y = particle.basePosition[1] + Math.sin(time + particle.phase) * 0.3;
+
+          const scale = 1 + Math.sin(time * 2 + particle.phase) * 0.3;
+          child.scale.setScalar(scale * (particle.size / 0.08));
         }
       });
     }
   });
 
-  if (intensity !== 'severe' && intensity !== 'moderate') return null;
-
-  const cloudColor = intensity === 'severe' ? '#3A2A4A' : '#5A5A7A';
-
   return (
-    <group ref={cloudRef}>
-      <Sphere args={[8, 64, 64]} position={[0, 0, -1]}>
-        <meshPhysicalMaterial
-          color={cloudColor}
-          transparent
-          opacity={0.1}
-          roughness={0.95}
-          metalness={0.05}
-          envMapIntensity={0.2}
-        />
-      </Sphere>
-
-      {/* 外层轻雾 */}
-      <Sphere args={[12, 48, 48]} position={[0, 0, -2]}>
-        <meshPhysicalMaterial
-          color={config.colors.secondary}
-          transparent
-          opacity={0.05}
-          roughness={0.98}
-          metalness={0.02}
-        />
-      </Sphere>
+    <group ref={groupRef}>
+      {particles.map((particle, i) => (
+        <Sphere
+          key={i}
+          position={particle.basePosition}
+          args={[particle.size, 16, 16]}
+        >
+          <meshPhysicalMaterial
+            color={particle.color}
+            roughness={0.5}
+            metalness={0.3}
+            transparent
+            opacity={0.6}
+            emissive={particle.color}
+            emissiveIntensity={0.5 + Math.random() * 0.3}
+          />
+        </Sphere>
+      ))}
     </group>
   );
 }
 
-// 格子背景组件 - 优化版
-function SpiralGridBackground({ config }: { config: SpiralEmotionConfig }) {
-  return (
-    <group>
-      {/* 底部格子 */}
-      <Grid
-        args={[25, 25]}
-        cellSize={1}
-        cellThickness={0.06}
-        cellColor={config.colors.secondary}
-        sectionSize={5}
-        sectionThickness={0.12}
-        sectionColor={config.colors.primary}
-        fadeDistance={18}
-        fadeStrength={1}
-        position={[0, 0, -2.5]}
-        rotation={[0, 0, 0]}
-        infiniteGrid
-      />
+// 分层色彩配置
+const emotionColorProfiles: Record<SpiralIntensity, any> = {
+  mild: {
+    // 内层螺旋：浅粉、蜜桃橙、淡洋红
+    innerLayer: '#FFB6C1',
+    innerLayer2: '#FFDAB9',
+    // 中层螺旋主体：青柠绿、薄荷蓝、薰衣草紫
+    primary: '#98FB98',
+    secondary: '#87CEEB',
+    accent: '#DDA0DD',
+    // 外层螺旋：冰蓝、紫罗兰、暖橘黄
+    outerLayer: '#B0E0E6',
+    outerLayer2: '#9370DB',
+    // 辅助色
+    column: '#C0C0C0',
+    glow: '#F0E68C',
+    gradient: ['#FFB6C1', '#98FB98', '#87CEEB', '#DDA0DD']
+  },
+  moderate: {
+    innerLayer: '#FF6B8A',
+    innerLayer2: '#FF8C69',
+    primary: '#90EE90',
+    secondary: '#00CED1',
+    accent: '#BA55D3',
+    outerLayer: '#4682B4',
+    outerLayer2: '#9932CC',
+    column: '#A9A9A9',
+    glow: '#FFA500',
+    gradient: ['#FF6B8A', '#90EE90', '#00CED1', '#BA55D3']
+  },
+  severe: {
+    innerLayer: '#DC143C',
+    innerLayer2: '#FF4500',
+    primary: '#32CD32',
+    secondary: '#4169E1',
+    accent: '#800080',
+    outerLayer: '#0000FF',
+    outerLayer2: '#FF8C00',
+    column: '#808080',
+    glow: '#FF0000',
+    gradient: ['#DC143C', '#32CD32', '#4169E1', '#800080']
+  }
+};
 
-      {/* 背面格子 */}
-      <Grid
-        args={[18, 18]}
-        cellSize={1}
-        cellThickness={0.04}
-        cellColor={config.colors.secondary}
-        sectionSize={5}
-        sectionThickness={0.1}
-        sectionColor={config.colors.primary}
-        fadeDistance={15}
-        fadeStrength={1.2}
-        position={[0, 0, -4]}
-        rotation={[0, 0, 0]}
-      />
-
-      {/* 侧面的格子 */}
-      <Grid
-        args={[18, 12]}
-        cellSize={1}
-        cellThickness={0.03}
-        cellColor={config.colors.glow}
-        sectionSize={5}
-        sectionThickness={0.06}
-        sectionColor={config.colors.secondary}
-        fadeDistance={12}
-        fadeStrength={1.5}
-        position={[0, -10, -2]}
-        rotation={[Math.PI / 2, 0, 0]}
-      />
-    </group>
-  );
-}
-
-// 完整螺旋情绪场景 - 优化版
+// 完整旋转楼梯式螺旋场景
 export function SpiralEmotionScene({ config }: { config: SpiralEmotionConfig }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const colorProfile = emotionColorProfiles[config.intensity];
+
+  // 生成旋转楼梯台阶
+  const stairs = useMemo(() => generateSpiralStairs(config), [config]);
+
+  useFrame((state) {
+    if (groupRef.current) {
+      // 整体旋转动画
+      groupRef.current.rotation.y = state.clock.elapsedTime * 0.05;
+
+      // 整体轻微浮动
+      groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.3;
+    }
+  });
+
   return (
     <>
-      {/* 格子背景 */}
-      <SpiralGridBackground config={config} />
+      {/* 漂浮彩色粒子 */}
+      <SpiralParticles config={config} />
 
-      {/* 氛围云雾 */}
-      <FogCloud intensity={config.intensity} config={config} />
+      {/* 中心立柱 */}
+      <CenterColumn config={config} />
 
-      {/* 主螺旋可视化 */}
-      <SpiralVisualization config={config} />
+      {/* 旋转楼梯台阶 */}
+      <group ref={groupRef}>
+        {stairs.map((step, i) => (
+          <SpiralStair
+            key={i}
+            step={step}
+            config={config}
+            layer={step.layer}
+          />
+        ))}
+      </group>
 
-      {/* 优化的照明系统 */}
+      {/* 环境光 - 斜向打光增强立体感 */}
       <ambientLight intensity={0.4} />
-      <pointLight
-        position={[10, 10, 5]}
-        intensity={0.5}
-        color={config.colors.glow}
-        distance={20}
-        decay={2}
+      <directionalLight
+        position={[10, 15, 8]}
+        intensity={0.6}
+        color={colorProfile.primary}
+        castShadow
       />
       <pointLight
-        position={[-10, -10, -5]}
+        position={[-8, 10, -5]}
+        intensity={0.4}
+        color={colorProfile.secondary}
+      />
+      <pointLight
+        position={[0, 8, 0]}
         intensity={0.3}
-        color={config.colors.secondary}
-        distance={18}
-        decay={2}
-      />
-      <pointLight
-        position={[0, 5, 8]}
-        intensity={0.25}
-        color={config.colors.primary}
-        distance={15}
-        decay={2}
+        color={colorProfile.glow}
       />
 
-      {/* Bloom后处理效果 */}
+      {/* Bloom辉光特效 */}
       <EffectComposer>
         <Bloom
-          intensity={1.3}
-          luminanceThreshold={0.25}
-          luminanceSmoothing={0.9}
-          radius={0.75}
+          intensity={1.8}
+          luminanceThreshold={0.3}
+          luminanceSmoothing={0.8}
+          radius={0.9}
         />
       </EffectComposer>
     </>

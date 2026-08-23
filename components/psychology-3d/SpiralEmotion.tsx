@@ -373,7 +373,7 @@ export function SpiralEmotionScene({ config }: { config: SpiralEmotionConfig }) 
   // 生成旋转楼梯台阶
   const stairs = useMemo(() => generateSpiralStairs(config), [config]);
 
-  useFrame((state) {
+  useFrame((state) =>{
     if (groupRef.current) {
       // 整体旋转动画
       groupRef.current.rotation.y = state.clock.elapsedTime * 0.05;

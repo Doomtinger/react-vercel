@@ -5,6 +5,14 @@ import * as THREE from 'three';
  * Each entity has state, physics, relationships, and metadata.
  */
 
+/**
+ * Scratch objects reused by the per-frame update so the simulation does not
+ * allocate. Allocation churn here showed up as periodic frame hitches.
+ */
+const _force = new THREE.Vector3();
+const _euler = new THREE.Euler();
+const _quat = new THREE.Quaternion();
+
 export enum EntityType {
   EMOTION = 'emotion',
   THOUGHT = 'thought',
@@ -174,22 +182,18 @@ export class MentalEntity {
     this.physics.velocity.multiplyScalar(Math.max(0, damping));
 
     // Update velocity with acceleration
-    this.physics.velocity.add(
-      this.physics.acceleration.clone().multiplyScalar(dt / 1000)
-    );
+    this.physics.velocity.addScaledVector(this.physics.acceleration, dt / 1000);
 
     // Update position
-    this.physics.position.add(
-      this.physics.velocity.clone().multiplyScalar(dt / 1000)
-    );
+    this.physics.position.addScaledVector(this.physics.velocity, dt / 1000);
 
     // Reset acceleration for next frame
     this.physics.acceleration.set(0, 0, 0);
 
     // Update rotation
     this.physics.angularVelocity.multiplyScalar(Math.max(0, damping));
-    const rotationDelta = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
+    const rotationDelta = _quat.setFromEuler(
+      _euler.set(
         this.physics.angularVelocity.x * dt / 1000,
         this.physics.angularVelocity.y * dt / 1000,
         this.physics.angularVelocity.z * dt / 1000
@@ -252,7 +256,7 @@ export class MentalEntity {
 
   // Force application
   applyForce(force: THREE.Vector3): void {
-    const f = force.clone().divideScalar(this.physics.mass);
+    const f = _force.copy(force).divideScalar(this.physics.mass);
     this.physics.acceleration.add(f);
   }
 

@@ -129,7 +129,7 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
       new THREE.Vector3(0, 0, 0),
       {
         label: 'Self',
-        color: new THREE.Color(0xffffff),
+        color: new THREE.Color(0xf2a65a), // amber - pure white glares
         category: 'core',
         tags: ['self', 'core', 'identity'],
         description: 'The center of psychological experience'
@@ -256,7 +256,10 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
   };
 
   return (
-    <div className={`mental-universe ${className}`}>
+    <div
+      className={`mental-universe ${className}`}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    >
       <Canvas
         camera={{
           position: [20, 15, 20],
@@ -267,25 +270,28 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
         gl={{
           antialias: true,
           alpha: true,
-          powerPreference: 'high-performance'
+          powerPreference: 'high-performance',
+          // keep highlights from blowing out to harsh white
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 0.7
         }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         performance={{ min: 0.5 }}
       >
         {/* Lighting */}
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={0.5} />
-        <pointLight position={[-10, -10, -10]} intensity={0.3} color="purple" />
-        <pointLight position={[0, 15, 0]} intensity={0.2} color="cyan" />
+        <ambientLight intensity={0.32} />
+        <pointLight position={[10, 10, 10]} intensity={0.3} />
+        <pointLight position={[-10, -10, -10]} intensity={0.2} color="purple" />
+        <pointLight position={[0, 15, 0]} intensity={0.12} color="cyan" />
 
         {/* Background */}
         <color attach="background" args={['#0a0a0f']} />
         <Stars
           radius={100}
           depth={50}
-          count={5000}
-          factor={4}
-          saturation={0}
+          count={3000}
+          factor={2.6}
+          saturation={0.7}
           fade
           speed={1}
         />
@@ -320,8 +326,8 @@ export const MentalUniverse: React.FC<MentalUniverseProps> = ({
         {enableThoughts && (
           <ThoughtBubbleField
             entityManager={entityManager}
-            maxBubbles={50}
-            spawnRate={0.5}
+            maxBubbles={16}
+            spawnRate={0.2}
           />
         )}
 

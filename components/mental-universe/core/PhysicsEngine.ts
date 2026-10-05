@@ -17,6 +17,19 @@ export interface PhysicsConfig {
   fluidViscosity: number;
 }
 
+/**
+ * Scratch vectors reused by the per-frame force calculations. Allocating a few
+ * Vector3 per entity per frame was enough garbage to trigger visible GC pauses.
+ */
+const _dir = new THREE.Vector3();
+const _relVel = new THREE.Vector3();
+const _float = new THREE.Vector3();
+const _drag = new THREE.Vector3();
+const _tmp = new THREE.Vector3();
+const _tangent = new THREE.Vector3();
+const _orbit = new THREE.Vector3();
+const _mood = new THREE.Vector3();
+
 export class PhysicsEngine {
   private entityManager: EntityManager;
   private config: PhysicsConfig;
@@ -94,7 +107,7 @@ export class PhysicsEngine {
                     Math.cos(this.time * 0.5 + entity.physics.position.y * 0.1);
 
     const floatStrength = 0.5 * entity.state.activity;
-    const floatForce = new THREE.Vector3(noiseX, noiseY, noiseZ).multiplyScalar(floatStrength);
+    const floatForce = _float.set(noiseX, noiseY, noiseZ).multiplyScalar(floatStrength);
 
     entity.applyForce(floatForce);
   }
@@ -107,7 +120,7 @@ export class PhysicsEngine {
       const target = this.entityManager.getEntity(relationship.targetId);
       if (!target || !target.isAlive()) continue;
 
-      const direction = new THREE.Vector3().subVectors(
+      const direction = _dir.subVectors(
         target.physics.position,
         entity.physics.position
       );
@@ -149,7 +162,7 @@ export class PhysicsEngine {
     for (const other of nearby) {
       if (other.id === entity.id) continue;
 
-      const direction = new THREE.Vector3().subVectors(
+      const direction = _dir.subVectors(
         entity.physics.position,
         other.physics.position
       );
@@ -167,7 +180,7 @@ export class PhysicsEngine {
         entity.applyForce(repulsionForce);
 
         // Soft collision - transfer some momentum
-        const relativeVelocity = new THREE.Vector3().subVectors(
+        const relativeVelocity = _relVel.subVectors(
           entity.physics.velocity,
           other.physics.velocity
         );
@@ -187,7 +200,7 @@ export class PhysicsEngine {
   private applyDragForce(entity: MentalEntity): void {
     const dragMagnitude = entity.physics.velocity.length();
     if (dragMagnitude > 0) {
-      const dragDirection = entity.physics.velocity.clone().normalize();
+      const dragDirection = _drag.copy(entity.physics.velocity).normalize();
       const dragForce = dragDirection.multiplyScalar(
         -dragMagnitude * dragMagnitude * this.config.dragCoefficient
       );
@@ -204,7 +217,7 @@ export class PhysicsEngine {
         // Self stays near center, gentle drift
         const centerDist = entity.physics.position.length();
         if (centerDist > 5) {
-          const toCenter = entity.physics.position.clone().normalize().multiplyScalar(-2);
+          const toCenter = _tmp.copy(entity.physics.position).normalize().multiplyScalar(-2);
           entity.applyForce(toCenter);
         }
         break;
@@ -221,23 +234,23 @@ export class PhysicsEngine {
 
       case EntityType.THOUGHT:
         // Thoughts float upward
-        entity.applyForce(new THREE.Vector3(0, 0.5, 0));
+        entity.applyForce(_tmp.set(0, 0.5, 0));
 
         // Thoughts drift based on activity
         const driftX = Math.sin(this.time + entity.id.length) * 0.3;
         const driftZ = Math.cos(this.time * 0.8 + entity.id.length) * 0.3;
-        entity.applyForce(new THREE.Vector3(driftX, 0, driftZ));
+        entity.applyForce(_tmp.set(driftX, 0, driftZ));
         break;
 
       case EntityType.MEMORY:
         // Memories slowly sink and drift
-        entity.applyForce(new THREE.Vector3(0, -0.1, 0));
+        entity.applyForce(_tmp.set(0, -0.1, 0));
         break;
 
       case EntityType.GOAL:
         // Goals pull towards them
         const pullStrength = entity.state.intensity * 0.5;
-        entity.applyForce(new THREE.Vector3(0, pullStrength, 0));
+        entity.applyForce(_tmp.set(0, pullStrength, 0));
         break;
     }
   }
@@ -248,10 +261,10 @@ export class PhysicsEngine {
   private calculateOrbitForce(entity: MentalEntity): THREE.Vector3 {
     // Find self entity
     const selfEntities = this.entityManager.getEntitiesByType(EntityType.SELF);
-    if (selfEntities.length === 0) return new THREE.Vector3(0, 0, 0);
+    if (selfEntities.length === 0) return _orbit.set(0, 0, 0);
 
     const self = selfEntities[0];
-    const toSelf = new THREE.Vector3().subVectors(
+    const toSelf = _dir.subVectors(
       self.physics.position,
       entity.physics.position
     );
@@ -261,10 +274,10 @@ export class PhysicsEngine {
 
     // Attraction to orbit distance
     const distanceDiff = distance - desiredDistance;
-    const attractionForce = toSelf.normalize().multiplyScalar(distanceDiff * 0.5);
+    const attractionForce = _orbit.copy(toSelf).normalize().multiplyScalar(distanceDiff * 0.5);
 
     // Tangential force for orbiting
-    const tangent = new THREE.Vector3(-toSelf.z, 0, toSelf.x).normalize();
+    const tangent = _tangent.set(-toSelf.z, 0, toSelf.x).normalize();
     const orbitSpeed = 0.3 * (entity.state.mood.arousal + 0.5);
     const orbitForce = tangent.multiplyScalar(orbitSpeed);
 
@@ -278,11 +291,11 @@ export class PhysicsEngine {
     const mood = entity.state.mood;
 
     // High arousal → more vertical movement
-    const arousalForce = new THREE.Vector3(0, mood.arousal - 0.5, 0).multiplyScalar(0.2);
+    const arousalForce = _mood.set(0, mood.arousal - 0.5, 0).multiplyScalar(0.2);
 
     // Valence affects horizontal spread
     const valenceAngle = mood.valence * Math.PI * 2;
-    const valenceForce = new THREE.Vector3(
+    const valenceForce = _tmp.set(
       Math.cos(valenceAngle),
       0,
       Math.sin(valenceAngle)

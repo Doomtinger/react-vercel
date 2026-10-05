@@ -6,6 +6,13 @@ import { MentalEntity } from '../core/MentalEntity';
  * Simulates simplified lattice fluid behavior for organic motion.
  */
 
+/**
+ * Scratch vectors reused by updateFluid(). Allocating a handful of Vector3 per
+ * particle per frame produced enough garbage to cause visible GC hitches.
+ */
+const _spring = new THREE.Vector3();
+const _normal = new THREE.Vector3();
+
 export interface FluidParticle {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
@@ -67,6 +74,8 @@ export class FluidPhysics {
     const time = Date.now() * 0.001;
     const intensity = entity.state.intensity;
     const activity = entity.state.activity;
+    const dtSec = dt / 1000;
+    const targetRadius = entity.getBaseScale();
 
     for (let i = 0; i < particles.length; i++) {
       const particle = particles[i];
@@ -86,32 +95,27 @@ export class FluidPhysics {
         particle.position.z + noiseZ * intensity
       );
 
-      // Spring force towards target
-      const springForce = new THREE.Vector3()
+      // Spring force towards target (spring constant 2.0)
+      _spring
         .subVectors(particle.targetPosition, particle.position)
-        .multiplyScalar(2.0); // Spring constant
+        .multiplyScalar(2.0 * dtSec);
+      particle.velocity.add(_spring);
 
       // Viscosity damping
-      const viscosityForce = particle.velocity.clone()
-        .multiplyScalar(-this.viscosity * 10);
-
-      // Apply forces
-      particle.velocity.add(springForce.multiplyScalar(dt / 1000));
-      particle.velocity.add(viscosityForce.multiplyScalar(dt / 1000));
+      particle.velocity.multiplyScalar(1 - this.viscosity * 10 * dtSec);
 
       // Surface tension (pull towards surface)
       const distanceFromCenter = particle.position.length();
-      const targetRadius = entity.getBaseScale();
       if (distanceFromCenter > 0) {
-        const normal = particle.position.clone().normalize();
-        const surfaceForce = normal.multiplyScalar(
-          (targetRadius - distanceFromCenter) * this.surfaceTension
+        _normal.copy(particle.position).normalize();
+        particle.velocity.addScaledVector(
+          _normal,
+          (targetRadius - distanceFromCenter) * this.surfaceTension * dtSec
         );
-        particle.velocity.add(surfaceForce.multiplyScalar(dt / 1000));
       }
 
       // Update position
-      particle.position.add(particle.velocity.clone().multiplyScalar(dt / 1000));
+      particle.position.addScaledVector(particle.velocity, dtSec);
 
       // Apply damping
       particle.velocity.multiplyScalar(this.damping);

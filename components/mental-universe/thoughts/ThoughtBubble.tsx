@@ -26,8 +26,9 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
   // Bubble size based on importance (intensity)
   const bubbleSize = useMemo(() => {
-    const baseSize = 0.5;
-    const importanceScale = entity.state.intensity * 1.0;
+    // Acts as the glowing nucleus sitting inside the galaxy disc
+    const baseSize = 0.16;
+    const importanceScale = entity.state.intensity * 0.26;
     return baseSize + importanceScale;
   }, [entity.state.intensity]);
 
@@ -96,17 +97,17 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       glowRef.current.scale.setScalar(glowScale);
 
       if (glowRef.current.material instanceof THREE.MeshBasicMaterial) {
-        const glowIntensity = entity.state.intensity * 0.4;
-        glowRef.current.material.opacity = glowIntensity * (isHovered ? 0.8 : 0.4);
+        const glowIntensity = entity.state.intensity * 0.26;
+        glowRef.current.material.opacity = glowIntensity * (isHovered ? 0.6 : 0.28);
       }
     }
 
     // Hover effect
     if (isHovered && bubbleRef.current.material instanceof THREE.MeshPhysicalMaterial) {
-      bubbleRef.current.material.emissiveIntensity = 0.6;
+      bubbleRef.current.material.emissiveIntensity = 0.4;
       bubbleRef.current.material.roughness = 0.1;
     } else if (bubbleRef.current.material instanceof THREE.MeshPhysicalMaterial) {
-      bubbleRef.current.material.emissiveIntensity = entity.state.activity * 0.3;
+      bubbleRef.current.material.emissiveIntensity = entity.state.activity * 0.15;
       bubbleRef.current.material.roughness = 0.3;
     }
 
@@ -141,7 +142,11 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <sphereGeometry args={[1, 32, 32]} />
+        <sphereGeometry args={[1, 16, 16]} />
+        {/*
+          Gentle surface motion only, so the bubble reads as a smooth galactic
+          bulge rather than a wobbling blob.
+        */}
         <MeshDistortMaterial
           color={bubbleColor}
           transparent
@@ -152,17 +157,17 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
           clearcoatRoughness={0.1}
           transmission={0.9}
           thickness={0.5}
-          distort={0.2 + entity.state.activity * 0.3}
+          distort={0.1 + entity.state.activity * 0.1}
           speed={1 + entity.state.activity}
           emissive={bubbleColor}
-          emissiveIntensity={entity.state.activity * 0.3}
+          emissiveIntensity={entity.state.activity * 0.15}
         />
       </mesh>
 
       {/* Outer glow for important thoughts */}
       {entity.state.intensity > 0.5 && (
         <mesh ref={glowRef}>
-          <sphereGeometry args={[1.2, 16, 16]} />
+          <sphereGeometry args={[1.2, 12, 12]} />
           <meshBasicMaterial
             color={bubbleColor}
             transparent
@@ -173,16 +178,11 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         </mesh>
       )}
 
-      {/* Specular highlight */}
-      <mesh position={[bubbleSize * 0.3, bubbleSize * 0.3, bubbleSize * 0.5]}>
-        <sphereGeometry args={[bubbleSize * 0.2, 8, 8]} />
-        <meshBasicMaterial
-          color={0xffffff}
-          transparent
-          opacity={0.4}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
+      {/*
+        NOTE: the offset specular-highlight sphere was removed - a detached
+        pure-white ball read as stray geometry and glared under additive
+        blending. The nucleus glow in CelestialEntity provides the highlight.
+      */}
 
       {/* Label on hover */}
       {isHovered && (
@@ -237,50 +237,63 @@ import { EntityManager } from '../core/EntityManager';
 
 export const ThoughtBubbleField: React.FC<ThoughtBubbleFieldProps> = ({
   entityManager,
-  maxBubbles = 50,
-  spawnRate = 0.5
+  maxBubbles = 16,
+  spawnRate = 0.2
 }) => {
   const [thoughts, setThoughts] = useState<MentalEntity[]>([]);
+  const spawnAcc = useRef(0);
+  const thoughtsKeyRef = useRef('');
 
   // Spawn new thoughts periodically
-  useFrame(() => {
+  useFrame((_, delta) => {
     const currentThoughts = entityManager.getEntitiesByType(EntityType.THOUGHT);
 
-    // Spawn new thoughts based on spawn rate
-    const shouldSpawn = Math.random() < spawnRate * 0.016; // Approx per frame
+    // Spawn on a time accumulator rather than a per-frame dice roll, so the
+    // rate is frame-rate independent.
+    spawnAcc.current += delta;
+    const interval = 1 / Math.max(0.01, spawnRate);
 
-    if (shouldSpawn && currentThoughts.length < maxBubbles) {
-      // Create new thought entity
-      const position = new THREE.Vector3(
-        (Math.random() - 0.5) * 20,
-        (Math.random() - 0.5) * 10,
-        (Math.random() - 0.5) * 20
-      );
+    if (spawnAcc.current >= interval) {
+      spawnAcc.current = 0;
 
-      const thought = entityManager.createEntity(
-        EntityType.THOUGHT,
-        position,
-        {
-          label: `Thought ${Math.floor(Math.random() * 1000)}`,
-          color: new THREE.Color(0x06b6d4),
-          category: 'thought',
-          tags: ['thought', 'stream']
-        }
-      );
+      if (currentThoughts.length < maxBubbles) {
+        // Create new thought entity
+        const position = new THREE.Vector3(
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 10,
+          (Math.random() - 0.5) * 20
+        );
 
-      // Set random properties
-      thought.state.intensity = 0.3 + Math.random() * 0.7;
-      thought.state.certainty = 0.5 + Math.random() * 0.5;
-      thought.state.activity = 0.2 + Math.random() * 0.8;
-      thought.state.mood = {
-        arousal: Math.random(),
-        valence: Math.random(),
-        dominance: Math.random()
-      };
+        const thought = entityManager.createEntity(
+          EntityType.THOUGHT,
+          position,
+          {
+            label: `Thought ${Math.floor(Math.random() * 1000)}`,
+            color: new THREE.Color(0x06b6d4),
+            category: 'thought',
+            tags: ['thought', 'stream']
+          }
+        );
+
+        // Set random properties
+        thought.state.intensity = 0.3 + Math.random() * 0.7;
+        thought.state.certainty = 0.5 + Math.random() * 0.5;
+        thought.state.activity = 0.2 + Math.random() * 0.8;
+        thought.state.mood = {
+          arousal: Math.random(),
+          valence: Math.random(),
+          dominance: Math.random()
+        };
+      }
     }
 
-    // Update thoughts list
-    setThoughts(currentThoughts);
+    // Only re-render when the set of thoughts actually changes - calling
+    // setThoughts() unconditionally re-rendered the field 60x per second.
+    const key = currentThoughts.map(t => t.id).join('|');
+    if (key !== thoughtsKeyRef.current) {
+      thoughtsKeyRef.current = key;
+      setThoughts(currentThoughts);
+    }
   });
 
   // Handle bubble interactions

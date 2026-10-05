@@ -16,6 +16,14 @@ export interface LayoutConfig {
   centerGravity: number;
 }
 
+/**
+ * Scratch vectors reused by the force-directed layout. Repulsion is O(n^2) and
+ * used to allocate a Vector3 per pair every frame.
+ */
+const _dir = new THREE.Vector3();
+const _neg = new THREE.Vector3();
+const _center = new THREE.Vector3(0, 0, 0);
+
 export class NetworkLayout {
   private entityManager: EntityManager;
   private config: LayoutConfig;
@@ -88,7 +96,7 @@ export class NetworkLayout {
       for (let j = i + 1; j < entities.length; j++) {
         const b = entities[j];
 
-        const direction = new THREE.Vector3().subVectors(
+        const direction = _dir.subVectors(
           a.physics.position,
           b.physics.position
         );
@@ -103,7 +111,7 @@ export class NetworkLayout {
         const force = direction.multiplyScalar(forceMagnitude);
 
         a.applyForce(force);
-        b.applyForce(force.clone().negate());
+        b.applyForce(_neg.copy(force).negate());
       }
     }
   }
@@ -118,7 +126,7 @@ export class NetworkLayout {
         if (!target || !target.isAlive()) continue;
         if (!entities.includes(target)) continue;
 
-        const direction = new THREE.Vector3().subVectors(
+        const direction = _dir.subVectors(
           target.physics.position,
           entity.physics.position
         );
@@ -140,10 +148,10 @@ export class NetworkLayout {
    * Apply center gravity to keep nodes centered
    */
   private applyCenterGravity(entities: MentalEntity[]): void {
-    const center = new THREE.Vector3(0, 0, 0);
+    const center = _center.set(0, 0, 0);
 
     for (const entity of entities) {
-      const direction = new THREE.Vector3().subVectors(
+      const direction = _dir.subVectors(
         center,
         entity.physics.position
       );
@@ -168,8 +176,9 @@ export class NetworkLayout {
       entity.physics.velocity.multiplyScalar(this.config.damping);
 
       // Update position
-      entity.physics.position.add(
-        entity.physics.velocity.clone().multiplyScalar(dt / 1000)
+      entity.physics.position.addScaledVector(
+        entity.physics.velocity,
+        dt / 1000
       );
     }
   }

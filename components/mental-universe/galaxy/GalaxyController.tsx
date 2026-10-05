@@ -1,6 +1,5 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState, useReducer } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { MentalEntity, EntityType } from '../core/MentalEntity';
 import { EntityManager } from '../core/EntityManager';
@@ -19,40 +18,51 @@ interface GalaxyControllerProps {
   onEntityHover?: (entity: MentalEntity | null) => void;
 }
 
-interface GalaxyState {
-  anxietyLevel: number;     // 0-1, affects galaxy contraction
-  confidenceLevel: number;  // 0-1, affects galaxy expansion
-  activityLevel: number;    // 0-1, affects animation speed
-  focusEntity: MentalEntity | null;
+/**
+ * Aggregate galaxy metrics. Kept in a ref instead of React state: writing them
+ * into state every frame re-rendered every galaxy in the scene 60x per second.
+ */
+interface GalaxyMetrics {
+  anxiety: number;     // 0-1, affects galaxy contraction
+  confidence: number;  // 0-1, affects galaxy expansion
+  activity: number;    // 0-1, affects animation speed
+  scale: number;       // resulting global scale
 }
+
+/** Cap on how many galaxies get rendered - past this the frame rate dies. */
+const MAX_RENDERED_GALAXIES = 32;
+
+/** How often the rendered entity list is refreshed (seconds). */
+const ENTITY_REFRESH_INTERVAL = 0.25;
 
 export const GalaxyController: React.FC<GalaxyControllerProps> = ({
   entityManager,
   onEntitySelect,
   onEntityHover
 }) => {
-  const [galaxyState, setGalaxyState] = useState<GalaxyState>({
-    anxietyLevel: 0.3,
-    confidenceLevel: 0.7,
-    activityLevel: 0.5,
-    focusEntity: null
-  });
-
+  const [focusEntity, setFocusEntity] = useState<MentalEntity | null>(null);
   const [hoveredEntity, setHoveredEntity] = useState<MentalEntity | null>(null);
-  const groupRef = useRef<THREE.Group>(null);
+  const [, refreshEntities] = useReducer((c: number) => c + 1, 0);
 
-  // Update galaxy state based on entity states
-  useFrame((state) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const metricsRef = useRef<GalaxyMetrics>({
+    anxiety: 0.3,
+    confidence: 0.7,
+    activity: 0.5,
+    scale: 1.06
+  });
+  const refreshAcc = useRef(0);
+
+  // Aggregate metrics are written into a ref and applied straight to the
+  // scene graph - no React state, no re-render.
+  useFrame((_, delta) => {
     const entities = entityManager.getActiveEntities();
 
-    // Calculate aggregate metrics
-    let totalIntensity = 0;
     let totalActivity = 0;
     let anxietyCount = 0;
     let confidenceCount = 0;
 
     for (const entity of entities) {
-      totalIntensity += entity.state.intensity;
       totalActivity += entity.state.activity;
 
       if (entity.metadata.tags.includes('anxiety')) {
@@ -63,36 +73,36 @@ export const GalaxyController: React.FC<GalaxyControllerProps> = ({
       }
     }
 
-    const avgIntensity = entities.length > 0 ? totalIntensity / entities.length : 0.5;
-    const avgActivity = entities.length > 0 ? totalActivity / entities.length : 0.5;
+    const count = Math.max(1, entities.length);
+    const metrics = metricsRef.current;
+    metrics.anxiety = Math.min(1, (anxietyCount / count) * 3);
+    metrics.confidence = Math.min(1, (confidenceCount / count) * 3);
+    metrics.activity = entities.length > 0 ? totalActivity / entities.length : 0.5;
+    metrics.scale = 1 - metrics.anxiety * 0.3 + metrics.confidence * 0.2;
 
-    // Update state
-    setGalaxyState(prev => ({
-      ...prev,
-      anxietyLevel: Math.min(1, anxietyCount / Math.max(1, entities.length) * 3),
-      confidenceLevel: Math.min(1, confidenceCount / Math.max(1, entities.length) * 3),
-      activityLevel: avgActivity
-    }));
+    if (groupRef.current) {
+      groupRef.current.scale.setScalar(metrics.scale);
+    }
+
+    // Entities are spawned/destroyed imperatively, so the rendered list is
+    // refreshed a few times per second rather than every frame.
+    refreshAcc.current += delta;
+    if (refreshAcc.current >= ENTITY_REFRESH_INTERVAL) {
+      refreshAcc.current = 0;
+      refreshEntities();
+    }
   });
 
-  // Galaxy expansion/contraction based on psychological state
-  const galaxyScale = useMemo(() => {
-    const baseScale = 1.0;
-    const anxietyContraction = galaxyState.anxietyLevel * 0.3;
-    const confidenceExpansion = galaxyState.confidenceLevel * 0.2;
-    return baseScale - anxietyContraction + confidenceExpansion;
-  }, [galaxyState.anxietyLevel, galaxyState.confidenceLevel]);
+  // Get Self entity.
+  // NOTE: these are read on every render on purpose - the entity manager is
+  // mutated in place, so a useMemo keyed on `entityManager` never refreshes
+  // and no galaxy would ever be rendered.
+  const selfEntity = entityManager.getEntitiesByType(EntityType.SELF)[0] || null;
 
-  // Get Self entity
-  const selfEntity = useMemo(() => {
-    const selfEntities = entityManager.getEntitiesByType(EntityType.SELF);
-    return selfEntities[0] || null;
-  }, [entityManager]);
-
-  // Get all entities for rendering
-  const allEntities = useMemo(() => {
-    return entityManager.getActiveEntities();
-  }, [entityManager]);
+  // Get all entities for rendering (capped so the scene stays interactive)
+  const allEntities = entityManager
+    .getActiveEntities()
+    .slice(0, MAX_RENDERED_GALAXIES);
 
   // Handle entity interactions
   const handleEntityHover = (entity: MentalEntity) => {
@@ -101,28 +111,20 @@ export const GalaxyController: React.FC<GalaxyControllerProps> = ({
   };
 
   const handleEntityClick = (entity: MentalEntity) => {
-    setGalaxyState(prev => ({ ...prev, focusEntity: entity }));
+    setFocusEntity(entity);
     onEntitySelect?.(entity);
   };
 
   const clearFocus = () => {
-    setGalaxyState(prev => ({ ...prev, focusEntity: null }));
+    setFocusEntity(null);
   };
 
   return (
     <>
-      {/* Global galaxy transform */}
-      <group ref={groupRef} scale={galaxyScale}>
-        {/* Starfield background */}
-        <Stars
-          radius={100}
-          depth={50}
-          count={5000}
-          factor={4}
-          saturation={0}
-          fade
-          speed={1}
-        />
+      {/* Global galaxy transform - scale is driven from useFrame */}
+      <group ref={groupRef}>
+        {/* NOTE: the background starfield lives in MentalUniverse's Canvas -
+            rendering it twice just doubles the glare. */}
 
         {/* Neural connections */}
         <NeuralConnection entityManager={entityManager} />
@@ -141,14 +143,14 @@ export const GalaxyController: React.FC<GalaxyControllerProps> = ({
             key={entity.id}
             entity={entity}
             isHovered={hoveredEntity?.id === entity.id}
-            isFocused={galaxyState.focusEntity?.id === entity.id}
+            isFocused={focusEntity?.id === entity.id}
             onHover={handleEntityHover}
             onClick={handleEntityClick}
           />
         ))}
 
         {/* Ambient particle field */}
-        <AmbientParticles activity={galaxyState.activityLevel} />
+        <AmbientParticles metricsRef={metricsRef} />
       </group>
     </>
   );
@@ -158,10 +160,10 @@ export const GalaxyController: React.FC<GalaxyControllerProps> = ({
  * AmbientParticles adds subtle floating particles for depth
  */
 interface AmbientParticlesProps {
-  activity: number;
+  metricsRef: React.RefObject<GalaxyMetrics>;
 }
 
-const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
+const AmbientParticles: React.FC<AmbientParticlesProps> = ({ metricsRef }) => {
   const particlesRef = useRef<THREE.Points>(null);
 
   const particleCount = 200;
@@ -178,9 +180,10 @@ const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
   const colors = useMemo(() => {
     const col = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
-      col[i * 3] = 0.5 + Math.random() * 0.5;
-      col[i * 3 + 1] = 0.5 + Math.random() * 0.5;
-      col[i * 3 + 2] = 1.0;
+      // dim, tinted dust - near-white particles glared under additive blending
+      col[i * 3] = 0.25 + Math.random() * 0.3;
+      col[i * 3 + 1] = 0.3 + Math.random() * 0.3;
+      col[i * 3 + 2] = 0.55 + Math.random() * 0.35;
     }
     return col;
   }, []);
@@ -189,6 +192,7 @@ const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
     if (!particlesRef.current) return;
 
     const time = state.clock.getElapsedTime();
+    const activity = metricsRef.current?.activity ?? 0.5;
     const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
 
     // Gentle floating motion
@@ -217,9 +221,9 @@ const AmbientParticles: React.FC<AmbientParticlesProps> = ({ activity }) => {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.1}
+        size={0.08}
         transparent
-        opacity={0.6}
+        opacity={0.35}
         vertexColors
         blending={THREE.AdditiveBlending}
         depthWrite={false}

@@ -24,6 +24,7 @@ interface MergeAnimation {
   progress: number; // 0-1
   startTime: number;
   duration: number;
+  fromScale: number; // base scale captured at animation start
 }
 
 export const EmotionMerger: React.FC<EmotionMergerProps> = ({
@@ -115,11 +116,11 @@ export const EmotionMerger: React.FC<EmotionMergerProps> = ({
           lerpFactor * 0.1
         );
 
-        // Shrink from entity
+        // Shrink from entity (relative to its base size)
         const scale = 1 - animation.progress * 0.5;
         const mesh = animation.fromEntity.getMesh();
         if (mesh) {
-          mesh.scale.setScalar(scale);
+          mesh.scale.setScalar(animation.fromScale * scale);
         }
       } else {
         // Complete merge
@@ -138,7 +139,8 @@ export const EmotionMerger: React.FC<EmotionMergerProps> = ({
       toEntity: to,
       progress: 0,
       startTime: Date.now(),
-      duration: 1000 // 1 second merge
+      duration: 1000, // 1 second merge
+      fromScale: from.getMesh()?.scale.x ?? 1
     };
 
     setMergeAnimations(prev => [...prev, animation]);
@@ -207,6 +209,8 @@ export const EmotionField: React.FC<EmotionFieldProps> = ({
 }) => {
   const fluidPhysicsRef = useRef<FluidPhysics | null>(null);
   const [emotions, setEmotions] = useState<MentalEntity[]>([]);
+  const seededIdsRef = useRef(new Set<string>());
+  const emotionsKeyRef = useRef('');
 
   // Initialize fluid physics
   useEffect(() => {
@@ -227,16 +231,25 @@ export const EmotionField: React.FC<EmotionFieldProps> = ({
       .getActiveEntities()
       .filter(e => e.type === 'emotion');
 
-    // Create fluid particles for new emotions
-    if (fluidPhysicsRef.current) {
+    // Create fluid particles for new emotions. Tracking the ids avoids calling
+    // getParticlePositions() every frame just to test for existence.
+    const fluid = fluidPhysicsRef.current;
+    if (fluid) {
       for (const emotion of currentEmotions) {
-        if (!fluidPhysicsRef.current!.getParticlePositions(emotion.id)) {
-          fluidPhysicsRef.current!.createFluidParticles(emotion, 20);
+        if (!seededIdsRef.current.has(emotion.id)) {
+          fluid.createFluidParticles(emotion, 20);
+          seededIdsRef.current.add(emotion.id);
         }
       }
     }
 
-    setEmotions(currentEmotions);
+    // Only re-render when the emotion set actually changes - calling
+    // setEmotions() unconditionally re-rendered the field 60x per second.
+    const key = currentEmotions.map(e => e.id).join('|');
+    if (key !== emotionsKeyRef.current) {
+      emotionsKeyRef.current = key;
+      setEmotions(currentEmotions);
+    }
   });
 
   // Update fluid physics

@@ -25,6 +25,7 @@ export { RenderSystem } from './core/RenderSystem';
 
 // Galaxy components
 export { CelestialEntity } from './galaxy/CelestialEntity';
+export { GalaxyDisc, GalaxyHaze } from './galaxy/GalaxyDisc';
 export { SelfOrbit } from './galaxy/SelfOrbit';
 export { NeuralConnection } from './galaxy/NeuralConnection';
 export { MentalGalaxy } from './galaxy/GalaxyController';

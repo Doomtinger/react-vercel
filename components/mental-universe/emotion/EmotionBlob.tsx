@@ -116,7 +116,9 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
 
   // Blob size based on intensity and behavior
   const blobSize = useMemo(() => {
-    const baseSize = 1.0;
+    // Acts as the glowing nucleus sitting inside the galaxy disc, so it stays
+    // much smaller than the disc itself.
+    const baseSize = 0.34;
     const intensityScale = 1 + entity.state.intensity * 0.5;
     const expansionScale = 1 + behavior.expansion * 0.3;
     return baseSize * intensityScale * expansionScale;
@@ -181,17 +183,17 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
       const size = blobSizeRef.current;
       glowRef.current.scale.setScalar(scale * 1.2);
       if (glowRef.current.material instanceof THREE.MeshBasicMaterial) {
-        const glowIntensity = entity.state.intensity * 0.5;
-        glowRef.current.material.opacity = glowIntensity * (isHovered ? 0.8 : 0.4);
+        const glowIntensity = entity.state.intensity * 0.3;
+        glowRef.current.material.opacity = glowIntensity * (isHovered ? 0.6 : 0.28);
       }
     }
 
     // Hover effect
     if (isHovered && blobRef.current.material instanceof THREE.MeshPhysicalMaterial) {
-      blobRef.current.material.emissiveIntensity = 0.8;
+      blobRef.current.material.emissiveIntensity = 0.45;
       blobRef.current.material.roughness = 0.1;
     } else if (blobRef.current.material instanceof THREE.MeshPhysicalMaterial) {
-      blobRef.current.material.emissiveIntensity = entity.state.activity * 0.5;
+      blobRef.current.material.emissiveIntensity = entity.state.activity * 0.22;
       blobRef.current.material.roughness = 0.3;
     }
 
@@ -225,7 +227,11 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
           entity.setHover(false);
         }}
       >
-        <sphereGeometry args={[1, 64, 64]} />
+        <sphereGeometry args={[1, 32, 32]} />
+        {/*
+          Gentle surface motion only - strong distortion made the blob read as
+          an amoeba instead of the smooth bulge of a galaxy.
+        */}
         <MeshDistortMaterial
           color={gradientColors.base}
           transparent
@@ -236,17 +242,17 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
           clearcoatRoughness={0.1}
           transmission={behavior.viscosity}
           thickness={1.0}
-          distort={0.4 + behavior.expansion * 0.3}
+          distort={0.1 + behavior.expansion * 0.05}
           speed={morphSpeed}
           emissive={blobColor}
-          emissiveIntensity={entity.state.activity * 0.5}
+          emissiveIntensity={entity.state.activity * 0.22}
         />
       </mesh>
 
       {/* Outer glow for strong emotions */}
       {entity.state.intensity > 0.5 && (
         <mesh ref={glowRef}>
-          <sphereGeometry args={[1.3, 32, 32]} />
+          <sphereGeometry args={[1.3, 16, 16]} />
           <meshBasicMaterial
             color={blobColor}
             transparent
@@ -257,76 +263,11 @@ export const EmotionBlob: React.FC<EmotionBlobProps> = ({
         </mesh>
       )}
 
-      {/* Ripple effect for calm/hope emotions */}
-      {behavior.ripple && entity.state.intensity > 0.3 && (
-        <RippleRings
-          count={3}
-          radius={blobSize}
-          color={blobColor}
-          speed={1.0}
-        />
-      )}
-
-      {/* Inner highlight */}
-      <mesh position={[0, 0, blobSize * 0.3]}>
-        <sphereGeometry args={[blobSize * 0.3, 16, 16]} />
-        <meshBasicMaterial
-          color={gradientColors.highlight}
-          transparent
-          opacity={0.3}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-    </group>
-  );
-};
-
-/**
- * RippleRings creates expanding rings for calm/hope emotions
- */
-interface RippleRingsProps {
-  count: number;
-  radius: number;
-  color: THREE.ColorRepresentation;
-  speed: number;
-}
-
-const RippleRings: React.FC<RippleRingsProps> = ({ count, radius, color, speed }) => {
-  const ringsRef = useRef<THREE.Group>(null);
-
-  useFrame((state) => {
-    if (!ringsRef.current) return;
-
-    const time = state.clock.getElapsedTime();
-
-    ringsRef.current.children.forEach((ring, i) => {
-      const phase = (time * speed + i * (1 / count)) % 1;
-      const scale = 1 + phase * 0.5;
-      const opacity = 1 - phase;
-
-      if (ring instanceof THREE.Mesh) {
-        ring.scale.setScalar(scale);
-        if (ring.material instanceof THREE.MeshBasicMaterial) {
-          ring.material.opacity = opacity * 0.3;
-        }
-      }
-    });
-  });
-
-  return (
-    <group ref={ringsRef}>
-      {[...Array(count)].map((_, i) => (
-        <mesh key={i} rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[radius, radius + 0.05, 32]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.3}
-            blending={THREE.AdditiveBlending}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
+      {/*
+        NOTE: ripple rings and the offset inner-highlight sphere were removed.
+        Both read as stray geometry once the entity is rendered as a galaxy -
+        the spiral disc and nucleus glow provide the detail instead.
+      */}
     </group>
   );
 };

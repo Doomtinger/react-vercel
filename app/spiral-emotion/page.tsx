@@ -23,6 +23,7 @@ interface EmotionAnalysis {
   interpretation: string;
   suggestions: string[];
   confidence: number; // 分析置信度
+  secondaryEmotions: string[]; // 检测到的附属情绪
 }
 
 // 增强的文本情绪分析 - 应用心理学专业知识
@@ -110,7 +111,55 @@ function analyzeEmotionText(text: string): EmotionAnalysis {
     suggestions: secondaryEmotions.includes('恐慌') || secondaryEmotions.includes('自我攻击')
       ? ['⚠️ 检测到需要优先关注的情绪信号', ...suggestions[intensity]]
       : suggestions[intensity],
-    confidence
+    confidence,
+    secondaryEmotions
+  };
+}
+
+// 不同附属情绪对应不同色相，使螺旋颜色随"结果"动态变化
+const emotionHues: Record<string, number> = {
+  委屈: 35,    // 橙黄：不公、委屈
+  恐慌: 0,     // 红：恐惧、恐慌
+  压抑: 230,   // 蓝：憋闷、压抑
+  自我攻击: 330, // 品红：自责、自我攻击
+  无力: 210,   // 灰蓝：疲惫、无力
+  困惑: 175,   // 青：迷茫、困惑
+};
+
+// 不同强度的基础色相（无附属情绪时的兜底）
+const intensityHue: Record<SpiralIntensity, number> = {
+  mild: 265,     // 浅紫
+  moderate: 250, // 暗紫
+  severe: 300    // 深紫
+};
+
+function hsl(h: number, s: number, l: number) {
+  const hue = ((Math.round(h) % 360) + 360) % 360;
+  return `hsl(${hue}, ${Math.round(s)}%, ${Math.round(l)}%)`;
+}
+
+// 根据分析结果动态生成螺旋配色
+function generatePalette(analysis: EmotionAnalysis) {
+  const intensity = analysis.intensity;
+
+  // 基准色相：优先取命中附属情绪的平均色相，否则用强度色相
+  let baseHue = intensityHue[intensity];
+  const hues = analysis.secondaryEmotions.map(e => emotionHues[e]).filter(h => h != null);
+  if (hues.length) baseHue = hues.reduce((a, b) => a + b, 0) / hues.length;
+
+  // 严重度影响饱和度与井底明暗
+  const sat = intensity === 'severe' ? 72 : intensity === 'moderate' ? 58 : 46;
+  const deepL = intensity === 'severe' ? 9 : intensity === 'moderate' ? 14 : 18;
+  // 重度时井底核心用警示红，其余沿用基准色相
+  const coreHue = intensity === 'severe' ? 0 : baseHue;
+
+  return {
+    tread: hsl(baseHue, sat, 72),        // 井口台阶：明亮
+    deep: hsl(baseHue, sat * 0.7, deepL), // 井底深处：暗
+    rail: hsl(baseHue + 18, sat, 82),     // 栏杆：偏亮
+    shaft: hsl(baseHue, sat * 0.5, 64),   // 中轴：柔和
+    core: hsl(coreHue, intensity === 'severe' ? 85 : sat, 65), // 井底核心
+    accent: hsl(baseHue + 180, sat, 70)   // 点缀：互补色
   };
 }
 
@@ -129,6 +178,8 @@ function getSpiralConfig(analysis: EmotionAnalysis): SpiralEmotionConfig {
   return {
     ...baseConfig,
     secondaryEmotions,
+    // 根据分析结果动态生成配色，让不同结果呈现不同颜色
+    palette: generatePalette(analysis),
     // 可以根据置信度调整螺旋的某些参数
     cycleCount: baseConfig.cycleCount + confidenceAdjustment
   };
@@ -443,7 +494,7 @@ export default function SpiralEmotionPage() {
             {/* 3D Canvas - 优化渲染设置 */}
             <div className="w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900">
               <Canvas
-                camera={{ position: [0, 0, 8], fov: 60 }}
+                camera={{ position: [0, 8, 9], fov: 50 }}
                 gl={{
                   antialias: true,
                   alpha: true,
@@ -453,26 +504,27 @@ export default function SpiralEmotionPage() {
                 }}
                 dpr={[1, 2]} // 动态像素比，优化性能
               >
-                {/* 优化的相机设置 */}
-                <PerspectiveCamera makeDefault position={[0, 0, 8]} fov={60} />
+                {/* 相机置于井口上方，俯瞰螺旋楼梯井 */}
+                <PerspectiveCamera makeDefault position={[0, 8, 9]} fov={50} />
 
                 {/* 场景内容 */}
                 <Suspense fallback={null}>
                   <SpiralScene config={spiralConfig} />
                 </Suspense>
 
-                {/* 优化的控制器 */}
+                {/* 控制器：视线聚焦井底深处，可俯仰到近正上方 */}
                 <OrbitControls
                   enableZoom={true}
                   enablePan={true}
                   enableRotate={true}
+                  target={[0, -5, 0]}
                   zoomSpeed={0.6}
                   panSpeed={0.5}
                   rotateSpeed={0.4}
-                  minDistance={5}
-                  maxDistance={15}
-                  minPolarAngle={Math.PI / 6}
-                  maxPolarAngle={Math.PI * 5 / 6}
+                  minDistance={3}
+                  maxDistance={22}
+                  minPolarAngle={0.05}
+                  maxPolarAngle={Math.PI * 0.92}
                   enableDamping
                   dampingFactor={0.05}
                 />

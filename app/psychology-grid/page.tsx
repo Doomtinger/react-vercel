@@ -79,8 +79,11 @@ export default function DreamEmotionPage() {
   const intensity = getSceneIntensity();
 
   // 快乐场景配置
+  // 数量按阶梯取值，避免拖动滑块时每帧重建花朵布局
   const happyConfig = {
-    elementCount: Math.floor(20 + intensity * 30), // 20-50个元素
+    elementCount: Math.round((20 + intensity * 30) / 5) * 5, // 几何元素数量 20-50
+    blossomCount: Math.round((14 + intensity * 16) / 4) * 4, // 樱花数量
+    roseCount: Math.round((6 + intensity * 10) / 3) * 3,     // 玫瑰数量
     colorSaturation: 0.7 + intensity * 0.3, // 0.7-1.0
     brightness: 0.8 + intensity * 0.2,    // 0.8-1.0
     movementSpeed: 0.2 + intensity * 0.3, // 运动速度
@@ -89,7 +92,7 @@ export default function DreamEmotionPage() {
 
   // 痛苦场景配置
   const painConfig = {
-    rainDensity: Math.floor(intensity * 100),      // 雨滴密度
+    rainDensity: Math.round((intensity * 300) / 20) * 20, // 雨滴密度（阶梯取值，避免每帧重建几何体）
     darkness: 0.3 + intensity * 0.5,            // 黑暗程度 0.3-0.8
     lightningFreq: intensity * 0.1,             // 闪电频率
     waveHeight: intensity * 2,                  // 海浪高度
@@ -97,10 +100,13 @@ export default function DreamEmotionPage() {
   };
 
   // 中立场景配置
+  // 注意：草叶/树木数量按阶梯取值，避免拖动滑块时每帧重建草地几何体
   const neutralConfig = {
-    grassCount: Math.floor(800 + intensity * 400),   // 草的数量
+    grassCount: Math.round((2600 + intensity * 2400) / 500) * 500, // 草叶数量
     windStrength: 0.5 + intensity * 0.5,          // 风力强度
-    treeSize: 1 + intensity * 0.3                 // 树的大小
+    treeSize: 1 + intensity * 0.3,                 // 树的大小
+    treeCount: Math.round((18 + intensity * 12) / 3) * 3, // 树的数量
+    fireflyCount: Math.round((90 + intensity * 110) / 20) * 20 // 萤火虫数量
   };
 
   return (
@@ -540,9 +546,9 @@ export default function DreamEmotionPage() {
                 </span>
                 <span>
                   {activeScene === 'happy'
-                    ? `${happyConfig.elementCount} 个治愈元素`
+                    ? `🌸 ${happyConfig.blossomCount} 樱花 · 🌹 ${happyConfig.roseCount} 玫瑰 · ✨ ${happyConfig.elementCount} 元素`
                     : activeScene === 'neutral'
-                    ? `${neutralConfig.grassCount} 个草粒`
+                    ? `${neutralConfig.grassCount} 根草 · ${neutralConfig.treeCount} 棵大树`
                     : `${painConfig.rainDensity} 个雨滴`}
                 </span>
               </div>
@@ -553,10 +559,16 @@ export default function DreamEmotionPage() {
                 </div>
               )}
               {activeScene === 'neutral' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-400">🌿</span>
-                  <span>风力强度: {neutralConfig.windStrength.toFixed(1)}x</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">🌿</span>
+                    <span>风力强度: {neutralConfig.windStrength.toFixed(1)}x</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-300">✨</span>
+                    <span>{neutralConfig.fireflyCount} 只萤火虫</span>
+                  </div>
+                </>
               )}
             </div>
           </div>

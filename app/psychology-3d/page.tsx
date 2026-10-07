@@ -28,9 +28,22 @@ const TimePerception = dynamic(
 
 type VisualizationType = 'emotion' | 'flow' | 'stress' | 'time';
 
+type EmotionId = 'happy' | 'calm' | 'excited' | 'sad' | 'peaceful' | 'energetic';
+
 export default function Psychology3DPage() {
   const [selectedViz, setSelectedViz] = useState<VisualizationType>('emotion');
   const [stressLevel, setStressLevel] = useState(0.5);
+  // 心流海面的调节项
+  const [flowFrequency, setFlowFrequency] = useState(1.2);
+  const [flowHue, setFlowHue] = useState(0);
+  // 时间感知的调节项
+  const [timeMood, setTimeMood] = useState(0); // -1 焦虑/无聊 .. +1 快乐/专注
+  const [timeMemory, setTimeMemory] = useState(0.5); // 0 单调重复 .. 1 充满新鲜
+  const [timeAge, setTimeAge] = useState(0.2); // 0 青少年 .. 1 老年
+  const [showTimeUI, setShowTimeUI] = useState(true); // 时间感知面板显隐
+  // 情绪星球：选中的情绪 + 程度
+  const [selectedEmotion, setSelectedEmotion] = useState<EmotionId | null>(null);
+  const [emotionIntensity, setEmotionIntensity] = useState(0.5);
 
   const visualizations = [
     {
@@ -57,7 +70,7 @@ export default function Psychology3DPage() {
     {
       id: 'time' as VisualizationType,
       name: '时间感知',
-      description: '观察时间如何在快乐与压力中变化',
+      description: '探索情绪、记忆与年龄如何扭曲你的主观时间',
       icon: '⏰',
       color: '#A78BFA',
     },
@@ -69,6 +82,7 @@ export default function Psychology3DPage() {
     { id: 'excited', label: '兴奋', emoji: '🤩', color: '#FF6B6B' },
     { id: 'sad', label: '悲伤', emoji: '😢', color: '#4D96FF' },
     { id: 'peaceful', label: '宁静', emoji: '🧘', color: '#A78BFA' },
+    { id: 'energetic', label: '活力', emoji: '⚡', color: '#F97316' },
   ];
 
   return (
@@ -123,7 +137,7 @@ export default function Psychology3DPage() {
             {selectedViz === 'stress' &&
               '适度的压力可以提高表现，但过度压力会影响健康。通过可视化压力水平，我们可以更好地管理和调节情绪。'}
             {selectedViz === 'time' &&
-              '我们的时间感知会因情绪状态而变化。快乐时时间飞逝，压力时时间缓慢。这是主观时间体验的有趣现象。'}
+              '时间感知不是看钟表读数字，而是大脑整合感官、记忆与注意力后"编织"出的主观体验。它没有单一中枢，由基底神经节、小脑、前额叶等多个脑区协作完成，并强烈受情绪、记忆量与年龄影响。'}
           </p>
         </div>
       </div>
@@ -133,14 +147,42 @@ export default function Psychology3DPage() {
         {/* 3D Canvas */}
         <div className="flex-1 relative">
           {selectedViz === 'emotion' && (
-            <div className="w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900">
-              <PsychologyScene />
+            <div className="w-full h-full relative bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900">
+              <PsychologyScene selectedEmotion={selectedEmotion} intensity={emotionIntensity} />
+              {selectedEmotion && (
+                <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm p-4 rounded-xl w-60">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-white font-semibold">
+                      🌟 {emotions.find((e) => e.id === selectedEmotion)?.label}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedEmotion(null)}
+                      className="text-xs text-gray-300 hover:text-white underline"
+                    >
+                      返回星系
+                    </button>
+                  </div>
+                  <label className="text-white text-sm mb-2 block">整体强度</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={emotionIntensity}
+                    onChange={(e) => setEmotionIntensity(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-gray-300 text-xs mt-2">
+                    数颗「{emotions.find((e) => e.id === selectedEmotion)?.label}」星球以不同色调散落分布；滑块缩放整组大小。
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {selectedViz === 'flow' && (
-            <div className="w-full h-full bg-gradient-to-br from-blue-900 via-teal-900 to-green-900">
-              <Canvas camera={{ position: [0, 5, 10], fov: 60 }}>
-                <FlowStateVisualization />
+            <div className="w-full h-full relative bg-gradient-to-br from-blue-900 via-teal-900 to-green-900">
+              <Canvas camera={{ position: [0, 3.2, 9.5], fov: 58 }}>
+                <FlowStateVisualization frequency={flowFrequency} hue={flowHue} />
                 <OrbitControls
                   enableZoom={true}
                   enablePan={true}
@@ -153,6 +195,58 @@ export default function Psychology3DPage() {
                 <pointLight position={[10, 10, 5]} intensity={0.8} color="#6BCB77" />
                 <pointLight position={[-10, -10, -5]} intensity={0.3} />
               </Canvas>
+
+              {/* 心流海面调节面板 */}
+              <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm p-4 rounded-xl">
+                <h3 className="text-white font-semibold mb-3">🌊 心流海面</h3>
+                <div className="w-48 space-y-4">
+                  <div>
+                    <label className="text-white text-sm mb-2 block">波动频率</label>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="3"
+                      step="0.1"
+                      value={flowFrequency}
+                      onChange={(e) => setFlowFrequency(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">
+                      当前: {flowFrequency.toFixed(1)}x
+                      {flowFrequency < 0.6 ? '（缓慢涌动）' :
+                       flowFrequency > 1.8 ? '（急促翻涌）' : '（自然起伏）'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-white text-sm mb-2 block">海水颜色</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.02"
+                      value={flowHue}
+                      onChange={(e) => setFlowHue(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className="inline-block w-4 h-4 rounded-full border border-white/30"
+                        style={{
+                          backgroundColor: `hsl(${(0.52 + flowHue) * 360}, 62%, 50%)`
+                        }}
+                      />
+                      <p className="text-gray-300 text-xs">
+                        {flowHue < 0.12 ? '青蓝海水' :
+                         flowHue < 0.3 ? '碧绿海水' :
+                         flowHue < 0.5 ? '深蓝海水' :
+                         flowHue < 0.72 ? '紫罗兰海水' :
+                         flowHue < 0.88 ? '暖暮海水' : '青蓝海水'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           {selectedViz === 'stress' && (
@@ -196,9 +290,10 @@ export default function Psychology3DPage() {
                 </div>
                 <div className="mt-3 space-y-1">
                   <p className="text-xs text-gray-400">
-                    {stressLevel > 0.7 ? '⚠️ 高压力 - 山脉变红，粒子躁动' :
-                     stressLevel > 0.4 ? '⚡ 中等压力 - 山脉橙黄，呼吸急促' :
-                     '😌 低压力 - 山脉翠绿，粒子平静'}
+                    {stressLevel >= 0.9 ? '🔥 极限压力 - 地表裂开岩浆，余烬冲天' :
+                     stressLevel > 0.7 ? '⚠️ 高压力 - 山脉赤红，余烬升腾' :
+                     stressLevel > 0.4 ? '⚡ 中等压力 - 山脉橙黄，浮尘飘动' :
+                     '😌 低压力 - 山脉翠绿，微尘平静'}
                   </p>
                 </div>
               </div>
@@ -207,7 +302,7 @@ export default function Psychology3DPage() {
           {selectedViz === 'time' && (
             <div className="w-full h-full bg-gradient-to-br from-purple-900 via-pink-900 to-blue-900">
               <Canvas camera={{ position: [0, 3, 12], fov: 60 }}>
-                <TimePerception />
+                <TimePerception mood={timeMood} memoryDensity={timeMemory} age={timeAge} />
                 <OrbitControls
                   enableZoom={true}
                   enablePan={true}
@@ -221,23 +316,108 @@ export default function Psychology3DPage() {
                 <pointLight position={[-8, -5, -5]} intensity={0.4} color="#DC143C" />
               </Canvas>
 
-              {/* 时间感知说明 */}
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm p-3 rounded-xl">
-                <div className="flex gap-8 text-center">
+              {/* 显隐切换按钮（常驻，避免面板遮住图形） */}
+              <button
+                onClick={() => setShowTimeUI(v => !v)}
+                className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-black/50 backdrop-blur-sm text-white text-sm px-3 py-1.5 rounded-full hover:bg-black/70 transition-colors"
+              >
+                {showTimeUI ? '🙈 隐藏面板' : '👁️ 显示面板'}
+              </button>
+
+              {showTimeUI && (<>
+              {/* 时间感知控制面板 */}
+              <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm p-4 rounded-xl">
+                <h3 className="text-white font-semibold mb-3">⏰ 时间感知</h3>
+                <div className="w-56 space-y-4">
                   <div>
-                    <div className="text-2xl mb-1">🌟 快乐时光</div>
-                    <p className="text-xs text-yellow-300">左侧 - 快速旋转 ⏩</p>
+                    <label className="text-white text-sm mb-2 block">情绪状态</label>
+                    <input
+                      type="range"
+                      min="-1"
+                      max="1"
+                      step="0.1"
+                      value={timeMood}
+                      onChange={(e) => setTimeMood(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">
+                      当前: {timeMood < -0.3 ? '😰 焦虑/无聊（时间凝滞）' :
+                             timeMood > 0.3 ? '😊 快乐/专注（时光飞逝）' : '😐 平静'}
+                    </p>
                   </div>
                   <div>
-                    <div className="text-2xl mb-1">⏰ 时间感知</div>
-                    <p className="text-xs text-purple-300">中心 - 相对体验</p>
+                    <label className="text-white text-sm mb-2 block">记忆密度</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={timeMemory}
+                      onChange={(e) => setTimeMemory(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">
+                      当前: {timeMemory < 0.3 ? '单调重复（回忆短暂）' :
+                             timeMemory > 0.7 ? '充满新鲜（回忆漫长）' : '适中'}
+                    </p>
                   </div>
                   <div>
-                    <div className="text-2xl mb-1">😰 压力时光</div>
-                    <p className="text-xs text-red-300">右侧 - 缓慢移动 ⏳</p>
+                    <label className="text-white text-sm mb-2 block">年龄</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={timeAge}
+                      onChange={(e) => setTimeAge(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">
+                      当前: {timeAge < 0.3 ? '青少年' : timeAge > 0.7 ? '老年（一年比一年快）' : '中年'}
+                    </p>
                   </div>
+                  {(() => {
+                    const speed = (0.35 + (timeMood + 1) * 0.775) * (1 + timeAge * 1.2);
+                    return (
+                      <div className="pt-1 text-center border-t border-white/10">
+                        <p className="text-white text-sm mt-2">
+                          主观时间 <span className="font-bold text-yellow-300">×{speed.toFixed(2)}</span>
+                        </p>
+                        <p className="text-gray-300 text-xs mt-1">
+                          {speed > 1.3 ? '⏩ 主观比客观走得快' :
+                           speed < 0.8 ? '⏳ 主观比客观走得慢' : '🕰️ 大致同步'}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
+
+              {/* 脑区网络图例 */}
+              <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm p-3 rounded-xl">
+                <h4 className="text-white text-xs font-semibold mb-2">🧠 分布式计时网络</h4>
+                <div className="space-y-1">
+                  {[
+                    ['基底神经节', '#A78BFA'],
+                    ['小脑', '#6BCB77'],
+                    ['前额叶', '#FFD93D'],
+                    ['下丘脑SCN', '#4D96FF'],
+                    ['颞上回', '#FF6B6B'],
+                  ].map(([n, c]) => (
+                    <div key={n} className="flex items-center gap-2">
+                      <span
+                        className="inline-block w-3 h-3 rounded-full"
+                        style={{ backgroundColor: c }}
+                      />
+                      <span className="text-gray-200 text-xs">{n}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-gray-400 text-[10px] mt-2 leading-tight">
+                  大脑没有单一「时钟」，靠多个脑区协作计时
+                </p>
+              </div>
+              </>)}
             </div>
           )}
 
@@ -257,7 +437,16 @@ export default function Psychology3DPage() {
               {emotions.map((emotion) => (
                 <div
                   key={emotion.id}
-                  className="flex-shrink-0 p-3 rounded-lg bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                  onClick={() =>
+                    setSelectedEmotion(
+                      selectedEmotion === emotion.id ? null : (emotion.id as EmotionId)
+                    )
+                  }
+                  className={`flex-shrink-0 p-3 rounded-lg transition-colors cursor-pointer border-2 ${
+                    selectedEmotion === emotion.id
+                      ? 'bg-white/25 border-white/60'
+                      : 'bg-white/10 border-transparent hover:bg-white/20'
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{emotion.emoji}</span>
@@ -311,15 +500,19 @@ export default function Psychology3DPage() {
 
         {selectedViz === 'time' && (
           <div className="h-32 bg-black/30 backdrop-blur-lg border-t border-white/10 p-4">
-            <h3 className="text-white font-semibold mb-2">时间感知现象</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="p-2 rounded bg-blue-500/20">
-                <p className="text-blue-400 font-medium">快乐时光</p>
-                <p className="text-gray-300 text-xs mt-1">⏩ 时间飞逝</p>
-              </div>
+            <h3 className="text-white font-semibold mb-2">时间感知的真相</h3>
+            <div className="grid grid-cols-3 gap-3 text-sm">
               <div className="p-2 rounded bg-purple-500/20">
-                <p className="text-purple-400 font-medium">压力时刻</p>
-                <p className="text-gray-300 text-xs mt-1">⏳ 时间缓慢</p>
+                <p className="text-purple-400 font-medium">情绪扭曲</p>
+                <p className="text-gray-300 text-xs mt-1">快乐/专注→时光飞逝；焦虑/无聊→度秒如年</p>
+              </div>
+              <div className="p-2 rounded bg-blue-500/20">
+                <p className="text-blue-400 font-medium">记忆密度</p>
+                <p className="text-gray-300 text-xs mt-1">新鲜经历多→回忆漫长；生活 Routine→飞快</p>
+              </div>
+              <div className="p-2 rounded bg-pink-500/20">
+                <p className="text-pink-400 font-medium">年龄加速</p>
+                <p className="text-gray-300 text-xs mt-1">年纪越大，一年比一年过得快</p>
               </div>
             </div>
           </div>

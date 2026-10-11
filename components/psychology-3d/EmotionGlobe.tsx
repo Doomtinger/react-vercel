@@ -166,7 +166,7 @@ function Planet({
       {/* 光环 */}
       {ring && (
         <mesh rotation={[Math.PI / 2.4, 0, 0]}>
-          <ringGeometry args={[radius * 1.5, radius * 2.3, 80]} />
+          <ringGeometry args={[radius * 1.15, radius * 1.4, 80]} />
           <meshBasicMaterial color={color} transparent opacity={0.18 + intensity * 0.3} side={THREE.DoubleSide} />
         </mesh>
       )}
@@ -278,16 +278,23 @@ function Sun() {
   );
 }
 
-// 公转轨道：绕中心恒星旋转，并附带一圈淡淡的轨道导引线
+// 公转轨道：绕中心恒星旋转，并附带一圈淡淡的轨道导引线。
+// inclination / node 让每条轨道拥有各自倾斜的平面 → 轨迹在 3D 中各异。
+// 关键：每条轨道半径各不相同（=不同同心球面），轨道之间永不相交；同一条轨道上的
+// 多颗行星以固定 120° 等距、同速公转，因此始终保持间距、永不碰撞。
 function Orbit({
   radius,
   speed,
-  startAngle,
+  startAngle = 0,
+  inclination = 0,
+  node = 0,
   children,
 }: {
   radius: number;
   speed: number;
-  startAngle: number;
+  startAngle?: number;
+  inclination?: number;
+  node?: number;
   children: ReactNode;
 }) {
   const ref = useRef<THREE.Group>(null);
@@ -295,15 +302,66 @@ function Orbit({
     if (ref.current) ref.current.rotation.y += delta * speed;
   });
   return (
-    <group ref={ref} rotation={[0, startAngle, 0]}>
-      <group position={[radius, 0, 0]}>{children}</group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[radius - 0.015, radius + 0.015, 128]} />
-        <meshBasicMaterial color="#33406b" transparent opacity={0.22} side={THREE.DoubleSide} />
-      </mesh>
+    <group rotation={[inclination, node, 0]}>
+      <group ref={ref} rotation={[0, startAngle, 0]}>
+        {children}
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[radius - 0.015, radius + 0.015, 128]} />
+          <meshBasicMaterial color="#33406b" transparent opacity={0.18} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
     </group>
   );
 }
+
+// 把某颗行星放到轨道上指定角度处（绕中心恒星公转）
+function OrbitSlot({ radius, angle, children }: { radius: number; angle: number; children: ReactNode }) {
+  return (
+    <group rotation={[0, angle, 0]}>
+      <group position={[radius, 0, 0]}>{children}</group>
+    </group>
+  );
+}
+
+// 星系布局：5 条不同半径（=不同同心球面，互不相交）的轨道，每条轨道有各自明显不同的
+// 倾角/升交点，行星数量与起始角也各不相同（3/4/3/3/2，按各自半径做均匀角分布）→
+// 整体呈立体的“星系”而非扁平表盘，共 15 颗大星球，永不重叠。
+const galaxyOrbits = [
+  { radius: 4.6, speed: 0.20, startAngle: 0.3, inclination: 0.35, node: 0.0, count: 3, start: 0 },
+  { radius: 7.6, speed: 0.16, startAngle: 1.0, inclination: -0.50, node: 1.2, count: 4, start: 3 },
+  { radius: 10.6, speed: 0.13, startAngle: 2.2, inclination: 0.60, node: 2.4, count: 3, start: 7 },
+  { radius: 13.6, speed: 0.11, startAngle: 0.7, inclination: -0.30, node: 3.6, count: 3, start: 10 },
+  { radius: 16.6, speed: 0.095, startAngle: 3.1, inclination: 0.45, node: 4.8, count: 2, start: 13 },
+];
+
+// 15 颗星球：保留原有大尺寸（半径 0.85~1.15），颜色取情绪色与补充色板。
+type GalaxyPlanet = {
+  emotion: keyof typeof emotionColors;
+  color: string;
+  radius: number;
+  style: PlanetStyle;
+  seed: number;
+  ring: boolean;
+  spin: number;
+};
+
+const galaxyPlanets: GalaxyPlanet[] = [
+  { emotion: 'sad', color: emotionColors.sad, radius: 1.0, style: 'spots', seed: 11, ring: false, spin: 0.5 },
+  { emotion: 'calm', color: '#e0c3fc', radius: 0.95, style: 'swirl', seed: 71, ring: false, spin: 0.6 },
+  { emotion: 'calm', color: '#a0e7e5', radius: 1.05, style: 'bands', seed: 72, ring: true, spin: 0.45 },
+  { emotion: 'happy', color: emotionColors.happy, radius: 0.95, style: 'swirl', seed: 22, ring: false, spin: 0.6 },
+  { emotion: 'calm', color: '#fbc687', radius: 1.0, style: 'spots', seed: 73, ring: false, spin: 0.5 },
+  { emotion: 'calm', color: '#ffaaa5', radius: 1.05, style: 'bands', seed: 74, ring: true, spin: 0.45 },
+  { emotion: 'excited', color: emotionColors.excited, radius: 1.15, style: 'bands', seed: 33, ring: false, spin: 0.45 },
+  { emotion: 'calm', color: '#b5ead7', radius: 0.95, style: 'swirl', seed: 75, ring: false, spin: 0.55 },
+  { emotion: 'calm', color: '#c7ceea', radius: 1.0, style: 'spots', seed: 76, ring: false, spin: 0.5 },
+  { emotion: 'calm', color: emotionColors.calm, radius: 0.85, style: 'swirl', seed: 44, ring: false, spin: 0.7 },
+  { emotion: 'calm', color: '#ffd1dc', radius: 1.0, style: 'bands', seed: 77, ring: true, spin: 0.5 },
+  { emotion: 'calm', color: '#caffbf', radius: 0.95, style: 'spots', seed: 78, ring: false, spin: 0.55 },
+  { emotion: 'peaceful', color: emotionColors.peaceful, radius: 1.0, style: 'bands', seed: 55, ring: true, spin: 0.4 },
+  { emotion: 'energetic', color: emotionColors.energetic, radius: 0.9, style: 'bands', seed: 66, ring: true, spin: 0.55 },
+  { emotion: 'calm', color: '#a3c4f3', radius: 1.05, style: 'swirl', seed: 79, ring: false, spin: 0.5 },
+];
 
 // 主场景：未选中情绪时显示完整星系；选中后聚焦该情绪的单颗行星
 export function PsychologyScene({
@@ -315,7 +373,7 @@ export function PsychologyScene({
 }) {
   return (
     <Canvas
-      camera={{ position: [0, 4, 14], fov: 50 }}
+      camera={{ position: [0, 8, 24], fov: 50 }}
       style={{ background: 'linear-gradient(to bottom, #05060f, #0b1026)' }}
     >
       <ambientLight intensity={0.3} />
@@ -335,24 +393,25 @@ export function PsychologyScene({
 
           <Sun />
 
-          <Orbit radius={4.2} speed={0.18} startAngle={0}>
-            <Planet emotion="sad" radius={1.0} style="spots" seed={11} spin={0.5} />
-          </Orbit>
-          <Orbit radius={5.4} speed={0.14} startAngle={1.1}>
-            <Planet emotion="happy" radius={0.95} style="swirl" seed={22} spin={0.6} />
-          </Orbit>
-          <Orbit radius={6.6} speed={0.11} startAngle={2.4}>
-            <Planet emotion="excited" radius={1.15} style="bands" seed={33} spin={0.45} />
-          </Orbit>
-          <Orbit radius={5.0} speed={0.16} startAngle={3.6}>
-            <Planet emotion="calm" radius={0.85} style="swirl" seed={44} spin={0.7} />
-          </Orbit>
-          <Orbit radius={7.6} speed={0.09} startAngle={4.8}>
-            <Planet emotion="peaceful" radius={1.0} style="bands" seed={55} spin={0.4} ring />
-          </Orbit>
-          <Orbit radius={6.0} speed={0.13} startAngle={5.9}>
-            <Planet emotion="energetic" radius={0.9} style="bands" seed={66} spin={0.55} ring />
-          </Orbit>
+          {/* 15 颗大星球：5 条倾斜轨道，每条行星数/起始角不同（3/4/3/3/2，均匀角分布），
+              不同半径=不同球面，永不重叠 */}
+          {galaxyOrbits.map((oc) => (
+            <Orbit key={oc.start} radius={oc.radius} speed={oc.speed} startAngle={oc.startAngle} inclination={oc.inclination} node={oc.node}>
+              {galaxyPlanets.slice(oc.start, oc.start + oc.count).map((p, k) => (
+                <OrbitSlot key={k} radius={oc.radius} angle={(k * 2 * Math.PI) / oc.count}>
+                  <Planet
+                    emotion={p.emotion}
+                    colorOverride={p.color}
+                    radius={p.radius}
+                    style={p.style}
+                    seed={p.seed}
+                    spin={p.spin}
+                    ring={p.ring}
+                  />
+                </OrbitSlot>
+              ))}
+            </Orbit>
+          ))}
         </>
       )}
 
@@ -363,8 +422,8 @@ export function PsychologyScene({
         zoomSpeed={0.6}
         panSpeed={0.5}
         rotateSpeed={0.4}
-        minDistance={6}
-        maxDistance={40}
+        minDistance={8}
+        maxDistance={80}
       />
     </Canvas>
   );

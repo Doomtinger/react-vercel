@@ -6,6 +6,7 @@ export {
   StressVisualization,
   TimePerception,
 } from './Visualizations';
+export { FlowStateVisualization2 } from './FlowStateSphere';
 export {
   EmotionVisualizationScene,
   EmotionCore,

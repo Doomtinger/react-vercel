@@ -17,6 +17,12 @@ const FlowStateVisualization = dynamic(
   { ssr: false }
 );
 
+// 心流状态2：球形流体场模型
+const FlowStateVisualization2 = dynamic(
+  () => import('@/components/psychology-3d/FlowStateSphere').then(mod => ({ default: mod.FlowStateVisualization2 })),
+  { ssr: false }
+);
+
 const StressVisualization = dynamic(
   () => import('@/components/psychology-3d/Visualizations').then(mod => ({ default: mod.StressVisualization })),
   { ssr: false }
@@ -47,7 +53,7 @@ const HypnosisRiverVisualization = dynamic(
   { ssr: false }
 );
 
-type VisualizationType = 'emotion' | 'flow' | 'stress' | 'time' | 'time2' | 'time3' | 'hypnosis' | 'hypnosis2';
+type VisualizationType = 'emotion' | 'flow' | 'flow2' | 'stress' | 'time' | 'time2' | 'time3' | 'hypnosis' | 'hypnosis2';
 
 type EmotionId = 'happy' | 'calm' | 'excited' | 'sad' | 'peaceful' | 'energetic';
 
@@ -57,6 +63,9 @@ export default function Psychology3DPage() {
   // 心流海面的调节项
   const [flowFrequency, setFlowFrequency] = useState(1.2);
   const [flowHue, setFlowHue] = useState(0);
+  // 心流状态2（球形流体场）的调节项：挑战难度 / 个人技能
+  const [flow2Challenge, setFlow2Challenge] = useState(0.5);
+  const [flow2Skill, setFlow2Skill] = useState(0.5);
   // 时间感知的调节项
   const [timeMood, setTimeMood] = useState(0); // -1 焦虑/无聊 .. +1 快乐/专注
   const [timeMemory, setTimeMemory] = useState(0.5); // 0 单调重复 .. 1 充满新鲜
@@ -94,6 +103,13 @@ export default function Psychology3DPage() {
       description: '体验完全沉浸的状态，感受专注与创造的流动',
       icon: '🌊',
       color: '#6BCB77',
+    },
+    {
+      id: 'flow2' as VisualizationType,
+      name: '心流状态2',
+      description: '球形流体场模型：蓝（技能）与金（挑战）两股流体缠绕交融进入心流；挑战>技能则焦虑，技能>挑战则无聊',
+      icon: '🌀',
+      color: '#86B8D9',
     },
     {
       id: 'stress' as VisualizationType,
@@ -197,6 +213,8 @@ export default function Psychology3DPage() {
               '情绪星球展示了6种基本情绪。每种情绪都有其独特的颜色和动态特征，帮助我们理解情绪的复杂性。'}
             {selectedViz === 'flow' &&
               '心流状态是一种完全沉浸的活动状态，在这种状态下，你会忘记时间的流逝，体验到高度的专注和满足感。'}
+            {selectedViz === 'flow2' &&
+              '球形流体场模型：蓝（技能）与金（挑战）两股流体缠绕交融成光带即心流；挑战高于技能偏焦虑，技能高于挑战偏无聊。'}
             {selectedViz === 'stress' &&
               '适度的压力可以提高表现，但过度压力会影响健康。通过可视化压力水平，我们可以更好地管理和调节情绪。'}
             {selectedViz === 'time' &&
@@ -320,6 +338,65 @@ export default function Psychology3DPage() {
               </div>
             </div>
           )}
+          {selectedViz === 'flow2' && (
+            <div className="w-full h-full relative bg-gradient-to-br from-slate-950 via-cyan-950 to-blue-950">
+              <Canvas camera={{ position: [0, 0, 11], fov: 55 }}>
+                <FlowStateVisualization2 challenge={flow2Challenge} skill={flow2Skill} />
+                <OrbitControls
+                  enableZoom={true}
+                  enablePan={false}
+                  enableRotate={true}
+                  zoomSpeed={0.6}
+                  rotateSpeed={0.4}
+                  minDistance={6}
+                  maxDistance={20}
+                />
+                <ambientLight intensity={0.6} />
+                <pointLight position={[8, 10, 6]} intensity={0.7} color="#9fc4e0" />
+                <pointLight position={[-8, -6, -5]} intensity={0.3} />
+              </Canvas>
+
+              <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm p-4 rounded-xl">
+                <h3 className="text-white font-semibold mb-3">🌀 心流状态2 · 球形流体场</h3>
+                <div className="w-56 space-y-4">
+                  <div>
+                    <label className="text-white text-sm mb-2 block">挑战难度</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={flow2Challenge}
+                      onChange={(e) => setFlow2Challenge(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">当前: {(flow2Challenge * 100).toFixed(0)}%</p>
+                  </div>
+                  <div>
+                    <label className="text-white text-sm mb-2 block">个人技能</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={flow2Skill}
+                      onChange={(e) => setFlow2Skill(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <p className="text-gray-300 text-xs mt-1">当前: {(flow2Skill * 100).toFixed(0)}%</p>
+                  </div>
+                  <div className="pt-1">
+                    {(() => {
+                      const d = flow2Skill - flow2Challenge;
+                      const label = Math.abs(d) < 0.12 ? '🌊 心流（技能与挑战均衡）' : d < 0 ? '⚠️ 焦虑（挑战>技能）' : '😐 无聊（技能>挑战）';
+                      return <p className="text-xs font-medium text-cyan-200">{label}</p>;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {selectedViz === 'stress' && (
             <div className="w-full h-full relative">
               <Canvas camera={{ position: [0, 8, 15], fov: 60 }}>

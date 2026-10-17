@@ -43,7 +43,7 @@ export default function SakuraPage() {
       {/* 3D 场景 */}
       <div className="flex-1 relative">
         <Canvas
-          camera={{ position: [8, 6, 12], fov: 60 }}
+          camera={{ position: [18, 13, 28], fov: 60 }}
           gl={{
             antialias: true,
             alpha: true,
@@ -64,6 +64,7 @@ export default function SakuraPage() {
               scale={30}
               blur={2}
               far={10}
+              frames={1}
             />
           </Suspense>
 
@@ -74,10 +75,10 @@ export default function SakuraPage() {
             zoomSpeed={0.6}
             panSpeed={0.5}
             rotateSpeed={0.4}
-            minDistance={5}
-            maxDistance={25}
+            minDistance={6}
+            maxDistance={60}
             maxPolarAngle={Math.PI / 2.1}
-            target={[0, 2, 0]}
+            target={[0, 3, 0]}
           />
         </Canvas>
 

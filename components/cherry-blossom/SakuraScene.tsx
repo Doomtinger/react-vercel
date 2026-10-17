@@ -11,7 +11,7 @@ type Branch = { start: THREE.Vector3; end: THREE.Vector3; r0: number; r1: number
 // 单朵樱花：5 片花瓣（扁球）+ 花蕊
 function createFlowerGeometry(): THREE.BufferGeometry {
   const geos: THREE.BufferGeometry[] = [];
-  const petalBase = new THREE.SphereGeometry(1, 10, 10);
+  const petalBase = new THREE.SphereGeometry(1, 7, 6);
   const petalScale = new THREE.Matrix4().makeScale(0.5, 0.14, 0.95);
 
   for (let i = 0; i < 5; i++) {
@@ -25,7 +25,7 @@ function createFlowerGeometry(): THREE.BufferGeometry {
     geos.push(g);
   }
 
-  const center = new THREE.SphereGeometry(0.2, 8, 8);
+  const center = new THREE.SphereGeometry(0.2, 5, 5);
   center.scale(1, 0.55, 1);
   center.translate(0, 0.07, 0);
   geos.push(center);
@@ -48,7 +48,43 @@ function createBranchGeometry(): THREE.BufferGeometry {
   return new THREE.CylinderGeometry(1, 1, 1, 6, 1);
 }
 
+// 樱花四色：粉红为主，白 / 淡黄 / 深红 也需要
+function pickBlossomColor(color: THREE.Color) {
+  const r = Math.random();
+  if (r < 0.55) {
+    // 粉红色（主色）
+    color.setHSL(0.9 + Math.random() * 0.04, 0.55 + Math.random() * 0.22, 0.66 + Math.random() * 0.12);
+  } else if (r < 0.7) {
+    // 白色（微粉）
+    color.setHSL(0.9 + Math.random() * 0.03, 0.05 + Math.random() * 0.12, 0.9 + Math.random() * 0.07);
+  } else if (r < 0.85) {
+    // 淡黄色
+    color.setHSL(0.13 + Math.random() * 0.04, 0.5 + Math.random() * 0.2, 0.78 + Math.random() * 0.1);
+  } else {
+    // 深红色
+    color.setHSL(0.96 + Math.random() * 0.03, 0.7 + Math.random() * 0.2, 0.42 + Math.random() * 0.12);
+  }
+}
+
+// 每棵树统一一种颜色（粉红为主，白 / 淡黄 / 深红 各占）
+function makeTreeColor(): THREE.Color {
+  const c = new THREE.Color();
+  const r = Math.random();
+  if (r < 0.55) {
+    c.setHSL(0.91 + (Math.random() - 0.5) * 0.02, 0.6 + Math.random() * 0.1, 0.7 + (Math.random() - 0.5) * 0.06);
+  } else if (r < 0.7) {
+    c.setHSL(0.9, 0.06 + Math.random() * 0.06, 0.9 + Math.random() * 0.05);
+  } else if (r < 0.85) {
+    c.setHSL(0.14 + (Math.random() - 0.5) * 0.02, 0.55 + Math.random() * 0.1, 0.8 + (Math.random() - 0.5) * 0.05);
+  } else {
+    c.setHSL(0.97 + (Math.random() - 0.5) * 0.02, 0.78 + Math.random() * 0.1, 0.46 + (Math.random() - 0.5) * 0.06);
+  }
+  return c;
+}
+
 // ---------- 递归生成树 ----------
+type Flower = { position: THREE.Vector3; color: THREE.Color };
+
 function grow(
   start: THREE.Vector3,
   dir: THREE.Vector3,
@@ -56,8 +92,9 @@ function grow(
   radius: number,
   depth: number,
   origin: THREE.Vector3,
+  treeColor: THREE.Color,
   branches: Branch[],
-  flowers: THREE.Vector3[]
+  flowers: Flower[]
 ) {
   const end = start.clone().add(dir.clone().multiplyScalar(length));
   branches.push({
@@ -67,74 +104,85 @@ function grow(
     r1: radius * 0.72,
   });
 
-  if (depth <= 0) {
-    const count = 12 + Math.floor(Math.random() * 8);
-    for (let k = 0; k < count; k++) {
-      flowers.push(
-        end.clone().add(origin).add(
+  // 沿枝条（枝桠）分布花朵：越靠枝梢越密，不再是只在头部
+  if (depth <= 3) {
+    const lateral = depth === 0 ? 4 : depth === 1 ? 2 : depth === 2 ? 1 : 0;
+    for (let k = 0; k < lateral; k++) {
+      const t = 0.15 + Math.random() * 0.8;
+      const base = start.clone().lerp(end, t).add(origin);
+      flowers.push({
+        position: base.add(
           new THREE.Vector3(
-            (Math.random() - 0.5) * 0.7,
-            (Math.random() - 0.2) * 0.7,
-            (Math.random() - 0.5) * 0.7
+            (Math.random() - 0.5) * 0.35,
+            (Math.random() - 0.5) * 0.35,
+            (Math.random() - 0.5) * 0.35
           )
-        )
-      );
+        ),
+        color: treeColor,
+      });
+    }
+  }
+
+  if (depth <= 0) {
+    // 枝头额外一簇，让树冠更饱满
+    const tip = 3 + Math.floor(Math.random() * 3);
+    for (let k = 0; k < tip; k++) {
+      flowers.push({
+        position: end.clone().add(origin).add(
+          new THREE.Vector3(
+            (Math.random() - 0.5) * 0.6,
+            (Math.random() - 0.2) * 0.6,
+            (Math.random() - 0.5) * 0.6
+          )
+        ),
+        color: treeColor,
+      });
     }
     return;
   }
 
-  const n = 2 + (Math.random() < 0.35 ? 1 : 0);
+  const n = 2 + (Math.random() < 0.5 ? 1 : 0);
+  const childLen = length * (0.74 + Math.random() * 0.08);
+  const childRad = radius * 0.72;
   for (let i = 0; i < n; i++) {
     const newDir = dir.clone();
-    const spread = 0.45 + Math.random() * 0.5;
+    const spread = 0.6 + Math.random() * 0.6;
     newDir.x += (Math.random() - 0.5) * spread;
     newDir.z += (Math.random() - 0.5) * spread;
-    newDir.y += 0.18; // 向上偏置
+    newDir.y += 0.16; // 向上偏置
     newDir.normalize();
-    grow(
-      end,
-      newDir,
-      length * (0.72 + Math.random() * 0.1),
-      radius * 0.7,
-      depth - 1,
-      origin,
-      branches,
-      flowers
-    );
-  }
-
-  // 上层枝条偶尔也点缀花朵，让树冠更饱满
-  if (depth <= 2 && Math.random() < 0.6) {
-    for (let k = 0; k < 4; k++) {
-      const t = Math.random();
-      const p = start.clone().lerp(end, t).add(origin);
-      flowers.push(
-        p.add(
-          new THREE.Vector3(
-            (Math.random() - 0.5) * 0.4,
-            (Math.random() - 0.2) * 0.4,
-            (Math.random() - 0.5) * 0.4
-          )
-        )
-      );
-    }
+    grow(end, newDir, childLen, childRad, depth - 1, origin, treeColor, branches, flowers);
   }
 }
 
 function buildScene() {
   const branches: Branch[] = [];
-  const flowers: THREE.Vector3[] = [];
+  const flowers: Flower[] = [];
 
-  const trees: { origin: THREE.Vector3; scale: number }[] = [
-    { origin: new THREE.Vector3(0, 0, 0), scale: 1.15 },
-    { origin: new THREE.Vector3(8, 0, 2), scale: 1.0 },
-    { origin: new THREE.Vector3(-7, 0, -3), scale: 1.05 },
-    { origin: new THREE.Vector3(4, 0, -7), scale: 0.9 },
-    { origin: new THREE.Vector3(-5, 0, 6), scale: 0.95 },
-    { origin: new THREE.Vector3(11, 0, -4), scale: 0.85 },
-    { origin: new THREE.Vector3(-11, 0, 3), scale: 0.9 },
-    { origin: new THREE.Vector3(2, 0, 9), scale: 0.8 },
+  // 中心 1 棵 + 3 圈共 20 棵
+  const trees: { origin: THREE.Vector3; scale: number; color: THREE.Color }[] = [];
+  trees.push({ origin: new THREE.Vector3(0, 0, 0), scale: 0.9, color: makeTreeColor() });
+  let seed = 1;
+  const rnd = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+  const rings = [
+    { r: 5, n: 5 },
+    { r: 10, n: 7 },
+    { r: 14, n: 7 },
   ];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.n; i++) {
+      const a = (i / ring.n) * Math.PI * 2 + (rnd() - 0.5) * 0.5;
+      const rr = ring.r + (rnd() - 0.5) * 2;
+      trees.push({
+        origin: new THREE.Vector3(Math.cos(a) * rr, 0, Math.sin(a) * rr),
+        scale: 0.65 + rnd() * 0.35,
+        color: makeTreeColor(),
+      });
+    }
+  }
 
   for (const t of trees) {
     grow(
@@ -142,8 +190,9 @@ function buildScene() {
       new THREE.Vector3((Math.random() - 0.5) * 0.1, 1, (Math.random() - 0.5) * 0.1).normalize(),
       2.6 * t.scale,
       0.3 * t.scale,
-      5,
+      6,
       t.origin,
+      t.color,
       branches,
       flowers
     );
@@ -151,8 +200,8 @@ function buildScene() {
 
   // 地面散落的落瓣
   const fallen: THREE.Vector3[] = [];
-  for (let i = 0; i < 220; i++) {
-    const r = Math.sqrt(Math.random()) * 22;
+  for (let i = 0; i < 500; i++) {
+    const r = Math.sqrt(Math.random()) * 30;
     const a = Math.random() * Math.PI * 2;
     fallen.push(new THREE.Vector3(Math.cos(a) * r, 0.02, Math.sin(a) * r));
   }
@@ -191,7 +240,7 @@ function BranchMesh({ branches }: { branches: Branch[] }) {
   return <instancedMesh ref={ref} args={[geo, mat, branches.length]} castShadow receiveShadow />;
 }
 
-function BlossomMesh({ flowers }: { flowers: THREE.Vector3[] }) {
+function BlossomMesh({ flowers }: { flowers: Flower[] }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const geo = useMemo(() => createFlowerGeometry(), []);
   const mat = useMemo(
@@ -199,28 +248,22 @@ function BlossomMesh({ flowers }: { flowers: THREE.Vector3[] }) {
     []
   );
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const color = useMemo(() => new THREE.Color(), []);
 
   useLayoutEffect(() => {
-    flowers.forEach((p, i) => {
-      dummy.position.copy(p);
+    flowers.forEach((f, i) => {
+      dummy.position.copy(f.position);
       dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       const s = 0.16 + Math.random() * 0.1;
       dummy.scale.setScalar(s);
       dummy.updateMatrix();
       ref.current!.setMatrixAt(i, dummy.matrix);
-
-      const hue = 0.9 + Math.random() * 0.035;
-      const sat = 0.62 + Math.random() * 0.22;
-      const light = 0.62 + Math.random() * 0.12;
-      color.setHSL(hue, sat, light);
-      ref.current!.setColorAt(i, color);
+      ref.current!.setColorAt(i, f.color);
     });
     ref.current!.instanceMatrix.needsUpdate = true;
     if (ref.current!.instanceColor) ref.current!.instanceColor.needsUpdate = true;
   }, [flowers]);
 
-  return <instancedMesh ref={ref} args={[geo, mat, flowers.length]} castShadow />;
+  return <instancedMesh ref={ref} args={[geo, mat, flowers.length]} />;
 }
 
 function FallenPetals({ positions }: { positions: THREE.Vector3[] }) {
@@ -245,7 +288,7 @@ function FallenPetals({ positions }: { positions: THREE.Vector3[] }) {
       dummy.scale.setScalar(s);
       dummy.updateMatrix();
       ref.current!.setMatrixAt(i, dummy.matrix);
-      color.setHSL(0.9 + Math.random() * 0.035, 0.6 + Math.random() * 0.22, 0.66 + Math.random() * 0.12);
+      pickBlossomColor(color);
       ref.current!.setColorAt(i, color);
     });
     ref.current!.instanceMatrix.needsUpdate = true;
@@ -297,7 +340,7 @@ function FallingPetals({ count = 170, area = 26 }: { count?: number; area?: numb
 
   useLayoutEffect(() => {
     data.forEach((_, i) => {
-      color.setHSL(0.9 + Math.random() * 0.035, 0.6 + Math.random() * 0.22, 0.66 + Math.random() * 0.12);
+      pickBlossomColor(color);
       ref.current!.setColorAt(i, color);
     });
     if (ref.current!.instanceColor) ref.current!.instanceColor.needsUpdate = true;
@@ -372,8 +415,8 @@ function Lighting() {
         intensity={1.0}
         color="#fff4ea"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-near={1}
         shadow-camera-far={60}
         shadow-camera-left={-20}
@@ -400,7 +443,7 @@ export default function SakuraScene() {
       <BranchMesh branches={branches} />
       <BlossomMesh flowers={flowers} />
       <FallenPetals positions={fallen} />
-      <FallingPetals count={240} area={34} />
+      <FallingPetals count={500} area={40} />
     </>
   );
 }

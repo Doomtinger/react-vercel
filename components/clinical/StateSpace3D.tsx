@@ -7,11 +7,21 @@ import * as THREE from 'three';
 import { CaseRecord, recordColor, type HypothesisLink, type MetricOption } from './data';
 
 const R = 6;
+
+function workflowOf(r: CaseRecord): string {
+  if (r.kind === 'assessment') return r.workflow ?? (r.missingItems.length > 0 ? 'missing_data' : 'normal');
+  if (r.kind === 'daily_state' || r.kind === 'life_event') return r.workflow ?? 'normal';
+  return r.workflow;
+}
+
 const WORKFLOW_COLOR: Record<string, string> = {
   normal: '',
+  draft: '',
   pending_review: '#E0A458',
   flagged: '#E5484D',
   missing_data: '#8A93A5',
+  confirmed: '#7FE0A0',
+  revised: '#7894FF',
 };
 
 function metricHeight(r: CaseRecord, metric: MetricOption): number {
@@ -25,11 +35,13 @@ function NodeGeometry({ kind }: { kind: CaseRecord['kind'] }) {
   switch (kind) {
     case 'assessment':
       return <sphereGeometry args={[0.45, 24, 24]} />;
+    case 'daily_state':
+      return <icosahedronGeometry args={[0.5]} />;
     case 'life_event':
       return <boxGeometry args={[0.7, 0.7, 0.7]} />;
     case 'clinical_note':
       return <octahedronGeometry args={[0.55]} />;
-    case 'review':
+    case 'risk_review':
       return <tetrahedronGeometry args={[0.6]} />;
   }
 }
@@ -54,9 +66,7 @@ function Node({
   const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const color = recordColor(record);
-  const workflow =
-    record.workflow ?? (record.kind === 'assessment' && record.missingItems.length > 0 ? 'missing_data' : 'normal');
-  const borderColor = WORKFLOW_COLOR[workflow];
+  const borderColor = WORKFLOW_COLOR[workflowOf(record)];
 
   useFrame((state) => {
     if (!meshRef.current) return;
@@ -111,11 +121,13 @@ function Node({
           <div className="whitespace-nowrap rounded-md bg-[#0c1322]/90 px-2 py-1 text-[11px] text-white/90 ring-1 ring-white/10">
             {record.kind === 'assessment'
               ? `${record.instrument} · ${record.rawScore}/${record.maxScore}`
+              : record.kind === 'daily_state'
+              ? `状态自述 · 整体 ${['很低落', '有些低落', '一般', '还不错', '很好'][record.overall]}`
               : record.kind === 'life_event'
-              ? `事件 · ${record.category}`
+              ? `事件 · ${record.category ?? '关键事件'}`
               : record.kind === 'clinical_note'
-              ? `记录 · ${record.author}`
-              : `复核 · ${record.reviewer}`}
+              ? `观察 · ${record.author}`
+              : `风险 · ${record.riskLevel}`}
           </div>
         </Html>
       )}
@@ -192,9 +204,7 @@ function Scene({
         <meshBasicMaterial color="#2A3550" />
       </mesh>
 
-      {timelinePts.length >= 2 && (
-        <Line points={timelinePts} color="#3A4A6A" lineWidth={1} transparent opacity={0.4} />
-      )}
+      {timelinePts.length >= 2 && <Line points={timelinePts} color="#3A4A6A" lineWidth={1} transparent opacity={0.4} />}
 
       {hypoPts.map((h, i) => (
         <Line key={i} points={h.points} color="#B39AFF" lineWidth={1} dashed dashSize={0.3} gapSize={0.2} transparent opacity={0.7} />

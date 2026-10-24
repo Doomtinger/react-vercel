@@ -261,6 +261,8 @@ pnpm run dev
 | RAG检索 | `/rag-demo` | 检索增强生成 |
 | 多媒体AI | `/multimedia-demo` | 图像/语音处理 |
 | 心理学3D | `/psychology-3d` | 心理学可视化 |
+| 心流空间 | `/flow` | 个人专注冥想 3D（本地历史 `/flow/history`） |
+| 临床工作台 | `/clinical` | Flow Space Clinical 双端：3D 状态空间 + 来访者记录端（5 类记录体系） |
 
 ---
 

@@ -1,8 +1,13 @@
 // Flow Space Clinical · 数据模型与虚构示例数据
+// 记录体系（5 类）：日常状态 / 标准化量表 / 关键事件 / 专业观察 / 风险复核
 // 注意：以下均为虚构演示数据，不含任何真实个人信息。
 
-export type RecordKind = 'assessment' | 'life_event' | 'clinical_note' | 'review';
+export type RecordKind = 'assessment' | 'daily_state' | 'life_event' | 'clinical_note' | 'risk_review';
+
+// 界面/复核状态（用于边框与证据面板）
 export type WorkflowState = 'normal' | 'pending_review' | 'flagged' | 'missing_data';
+export type NoteWorkflow = 'draft' | 'pending_review' | 'confirmed' | 'revised';
+export type RiskLevel = 'low' | 'medium' | 'high';
 
 export interface AssessmentRecord {
   id: string;
@@ -23,39 +28,74 @@ export interface AssessmentRecord {
   workflow?: WorkflowState;
 }
 
+// 01 日常状态记录（来访者填写，轻量、非标准化）
+export interface DailyStateRecord {
+  id: string;
+  caseId: string;
+  kind: 'daily_state';
+  timestamp: number;
+  overall: number; // 0-4：很低落 → 很好
+  stress: number; // 0-4
+  energy: number; // 0-4
+  feelings: string[]; // 多选情绪标签
+  sleep: 'good' | 'normal' | 'poor';
+  impact: 0 | 1 | 2 | 3; // 日常功能影响
+  notableEvent?: string; // 特别事件（可选）
+  workflow?: WorkflowState;
+}
+
+// 03 关键事件记录（来访者填写，事件卡结构）
 export interface LifeEventRecord {
   id: string;
   caseId: string;
   kind: 'life_event';
   timestamp: number;
-  category: string;
-  content: string;
+  situation: string; // 发生了什么
+  thoughts: string; // 当时的想法
+  feelings: string; // 感受
+  bodyReactions: string; // 身体反应
+  behavior: string; // 当时的行为
+  outcome: string; // 后来的结果
+  needHelp?: string; // 现在还需要什么帮助
+  category?: string;
   workflow?: WorkflowState;
 }
 
+// 04 咨询师专业观察（专业人员填写，结构化 + 版本化）
 export interface ClinicalNoteRecord {
   id: string;
   caseId: string;
   kind: 'clinical_note';
   timestamp: number;
   author: string;
-  content: string;
-  status: 'draft' | 'final';
-  workflow?: WorkflowState;
+  topic: string; // 本次会谈主题
+  clientReport: string; // 来访者报告
+  observation: string; // 专业观察
+  assessmentSummary?: string; // 评估结果
+  hypothesis?: string; // 初步假设
+  toConfirm?: string; // 需要进一步确认
+  plan: string; // 后续计划
+  workflow: NoteWorkflow; // draft → pending_review → confirmed → revised
+  revision: number;
+  revisedFrom?: string;
 }
 
-export interface ReviewRecord {
+// 05 风险复核与转介记录（需专业流程）
+export interface RiskReviewRecord {
   id: string;
   caseId: string;
-  kind: 'review';
+  kind: 'risk_review';
   timestamp: number;
-  reviewer: string;
-  finding: string;
-  action: string;
-  workflow?: WorkflowState;
+  signalSource: string; // 风险信号来源
+  verification: string; // 人工核实结果
+  action: string; // 处置措施
+  responsible: string; // 责任人
+  followUp: string; // 后续跟进
+  riskLevel: RiskLevel;
+  workflow: NoteWorkflow;
 }
 
-export type CaseRecord = AssessmentRecord | LifeEventRecord | ClinicalNoteRecord | ReviewRecord;
+export type CaseRecord = AssessmentRecord | DailyStateRecord | LifeEventRecord | ClinicalNoteRecord | RiskReviewRecord;
 
 export interface HypothesisLink {
   from: string;
@@ -112,21 +152,87 @@ export const INSTRUMENTS: Record<
   },
 };
 
-// 类别 → 颜色（仅作“工具类别”区分，不编码好/坏或疾病类型）
+// 类别 → 颜色（仅作“记录类别/工具类别”区分，不编码好/坏或疾病类型）
 export const CATEGORY_COLORS: Record<string, string> = {
   Mood: '#7894FF',
   Anxiety: '#B39AFF',
   Function: '#5FD0C0',
+  SelfReport: '#86E1C9',
   Event: '#8AA0B5',
-  Note: '#9AA7B5',
-  Review: '#7FE0A0',
+  Note: '#C9A6FF',
+  Risk: '#F2A65A',
 };
 
 export function recordColor(r: CaseRecord): string {
   if (r.kind === 'assessment') return CATEGORY_COLORS[INSTRUMENTS[r.instrument].category];
+  if (r.kind === 'daily_state') return CATEGORY_COLORS.SelfReport;
   if (r.kind === 'life_event') return CATEGORY_COLORS.Event;
   if (r.kind === 'clinical_note') return CATEGORY_COLORS.Note;
-  return CATEGORY_COLORS.Review;
+  return CATEGORY_COLORS.Risk;
+}
+
+export function recordCategoryLabel(r: CaseRecord): string {
+  switch (r.kind) {
+    case 'assessment':
+      return '量表评估';
+    case 'daily_state':
+      return '日常状态';
+    case 'life_event':
+      return '关键事件';
+    case 'clinical_note':
+      return '专业观察';
+    case 'risk_review':
+      return '风险复核';
+  }
+}
+
+// 表单选项（来访者记录端与证据面板共用）
+export const OVERALL_OPTIONS = ['很低落', '有些低落', '一般', '还不错', '很好'];
+export const FEELING_TAGS = ['焦虑', '低落', '烦躁', '疲惫', '孤独', '平静', '愉快', '麻木'];
+export const SLEEP_OPTIONS = [
+  { v: 'good', l: '比较好' },
+  { v: 'normal', l: '一般' },
+  { v: 'poor', l: '不太好' },
+] as const;
+export const IMPACT_OPTIONS = [
+  { v: 0, l: '基本没有影响' },
+  { v: 1, l: '有一些影响，但大部分事情能完成' },
+  { v: 2, l: '影响明显，部分事情难以完成' },
+  { v: 3, l: '影响很大，基本无法正常完成' },
+] as const;
+export const NOTABLE_EVENT_OPTIONS = ['工作或学习', '人际关系', '家庭', '身体不适', '经济压力', '没有明显事件', '其他'];
+
+// 计分助手：按规范计分并返回严重程度
+export function severityFromScore(instrument: string, rawScore: number): string {
+  if (instrument === 'PHQ-9') {
+    if (rawScore <= 4) return '极小';
+    if (rawScore <= 9) return '轻度';
+    if (rawScore <= 14) return '中度';
+    if (rawScore <= 19) return '中重度';
+    return '重度';
+  }
+  if (instrument === 'GAD-7') {
+    if (rawScore <= 4) return '极小';
+    if (rawScore <= 9) return '轻度';
+    if (rawScore <= 14) return '中度';
+    return '重度';
+  }
+  if (instrument === 'WSAS') {
+    if (rawScore <= 10) return '正常';
+    if (rawScore <= 20) return '轻度损害';
+    if (rawScore <= 30) return '中度损害';
+    return '严重损害';
+  }
+  return '—';
+}
+
+export function scoreAssessment(
+  instrument: string,
+  responses: Record<string, number>
+): { rawScore: number; maxScore: number; severity: string } {
+  const meta = INSTRUMENTS[instrument];
+  const rawScore = Object.values(responses).reduce((a, b) => a + b, 0);
+  return { rawScore, maxScore: meta.maxScore, severity: severityFromScore(instrument, rawScore) };
 }
 
 export function fmtDate(ts: number): string {
@@ -153,6 +259,19 @@ export const CASES: ClinicalCase[] = [
     status: '随访中',
     hypotheses: [{ from: 'evt-2041-1', to: 'phq-2041-4', note: '待验证：7 月工作变动是否与 8 月 PHQ-9 升高相关' }],
     records: [
+      {
+        id: 'daily-2041-1',
+        caseId: 'case-2041',
+        kind: 'daily_state',
+        timestamp: D('2026-07-04'),
+        overall: 1,
+        stress: 3,
+        energy: 1,
+        feelings: ['疲惫', '低落'],
+        sleep: 'poor',
+        impact: 2,
+        notableEvent: '工作或学习',
+      },
       {
         id: 'phq-2041-1',
         caseId: 'case-2041',
@@ -193,8 +312,14 @@ export const CASES: ClinicalCase[] = [
         caseId: 'case-2041',
         kind: 'life_event',
         timestamp: D('2026-07-15'),
+        situation: '升职后责任增加，出差频繁，原定的作息被打乱。',
+        thoughts: '我应该把每件事都做好，不能让人失望。',
+        feelings: '压力、焦虑、疲惫',
+        bodyReactions: '入睡困难，肩颈紧绷。',
+        behavior: '连续加班，减少了运动和社交。',
+        outcome: '短期内勉强维持，但情绪持续走低。',
+        needHelp: '希望在咨询中讨论如何平衡工作与休息。',
         category: '工作变动',
-        content: '升职后责任增加，出差频繁，作息被打乱。',
       },
       {
         id: 'note-2041-1',
@@ -202,8 +327,15 @@ export const CASES: ClinicalCase[] = [
         kind: 'clinical_note',
         timestamp: D('2026-07-22'),
         author: '咨询师 L',
-        content: '来访者主诉压力上升，入睡困难，但对工作仍有掌控感。',
-        status: 'draft',
+        topic: '工作压力与睡眠',
+        clientReport: '来访者主诉压力上升、入睡困难，但自述对工作仍有掌控感。',
+        observation: '会谈中语速偏快，数次叹气；提及家庭支持时神情放松。',
+        assessmentSummary: 'PHQ-9 轻度（缺 1 项）；GAD-7 极小。',
+        hypothesis: '压力可能主要来自角色转换后的自我要求，而非客观负荷。',
+        toConfirm: '自伤念头缺失项需在下次补全，并确认安全性。',
+        plan: '两周后复评 PHQ-9；布置睡眠节律记录。',
+        workflow: 'draft',
+        revision: 1,
       },
       {
         id: 'phq-2041-4',
@@ -222,13 +354,17 @@ export const CASES: ClinicalCase[] = [
         workflow: 'pending_review',
       },
       {
-        id: 'rev-2041-1',
+        id: 'risk-2041-1',
         caseId: 'case-2041',
-        kind: 'review',
-        timestamp: D('2026-08-20'),
-        reviewer: '督导 R',
-        finding: '情绪与睡眠需重点关注，自伤念头为 2 分需复核。',
-        action: '增加随访频率，建议加入睡眠干预。',
+        kind: 'risk_review',
+        timestamp: D('2026-08-06'),
+        signalSource: 'PHQ-9 自伤念头条目得 2 分（每周有几天）',
+        verification: '经咨询师电话回访，来访者否认主动自杀意图，有求助意愿。',
+        action: '启动周随访；提供 24h 求助渠道；告知紧急联系人。',
+        responsible: '咨询师 L（督导 R 复核）',
+        followUp: '7 日内复评并确认安全计划。',
+        riskLevel: 'medium',
+        workflow: 'confirmed',
       },
       {
         id: 'gad-2041-2',
@@ -265,12 +401,30 @@ export const CASES: ClinicalCase[] = [
         reviewedAt: D('2026-09-14'),
       },
       {
+        id: 'daily-2041-2',
+        caseId: 'case-2041',
+        kind: 'daily_state',
+        timestamp: D('2026-09-21'),
+        overall: 2,
+        stress: 2,
+        energy: 2,
+        feelings: ['平静'],
+        sleep: 'normal',
+        impact: 1,
+      },
+      {
         id: 'evt-2041-2',
         caseId: 'case-2041',
         kind: 'life_event',
         timestamp: D('2026-09-20'),
+        situation: '与家人关系改善，获得稳定支持。',
+        thoughts: '原来我并不是一个人面对这些。',
+        feelings: '安心、稍微轻松',
+        bodyReactions: '紧张感较前期下降。',
+        behavior: '开始恢复运动，主动约朋友。',
+        outcome: '情绪逐步平稳。',
+        needHelp: '暂无，希望巩固现有节奏。',
         category: '家庭支持增强',
-        content: '与家人关系改善，获得稳定支持。',
       },
       {
         id: 'wsas-2041-1',
@@ -312,8 +466,15 @@ export const CASES: ClinicalCase[] = [
         kind: 'clinical_note',
         timestamp: D('2026-10-12'),
         author: '咨询师 L',
-        content: '近两周情绪较平稳，睡眠改善，功能逐步恢复。',
-        status: 'final',
+        topic: '阶段回顾',
+        clientReport: '近两周情绪较平稳，睡眠改善，功能逐步恢复。',
+        observation: '会谈状态放松，能主动反思；无急性风险信号。',
+        assessmentSummary: 'PHQ-9 轻度；WSAS 中度损害（较 8 月下降）。',
+        hypothesis: '支持性资源增加后，主观困扰与功能同步改善。',
+        toConfirm: '功能损害仍需持续观察，尤其工作领域。',
+        plan: '改为月度随访；下次会谈聚焦职业角色期待。',
+        workflow: 'confirmed',
+        revision: 2,
       },
     ],
   },
@@ -327,6 +488,18 @@ export const CASES: ClinicalCase[] = [
     status: '稳定随访',
     hypotheses: [],
     records: [
+      {
+        id: 'daily-2099-1',
+        caseId: 'case-2099',
+        kind: 'daily_state',
+        timestamp: D('2026-07-21'),
+        overall: 3,
+        stress: 1,
+        energy: 3,
+        feelings: ['平静', '愉快'],
+        sleep: 'good',
+        impact: 0,
+      },
       {
         id: 'phq-2099-1',
         caseId: 'case-2099',
@@ -366,8 +539,14 @@ export const CASES: ClinicalCase[] = [
         caseId: 'case-2099',
         kind: 'life_event',
         timestamp: D('2026-09-10'),
+        situation: '搬迁至新城市，社交圈暂时减少。',
+        thoughts: '换个环境也许能轻松一点。',
+        feelings: '期待中带一点不安',
+        bodyReactions: '无明显躯体不适。',
+        behavior: '主动整理新居，规划作息。',
+        outcome: '适应顺利。',
+        needHelp: '暂无。',
         category: '搬迁',
-        content: '搬迁至新城市，社交圈暂时减少。',
       },
       {
         id: 'note-2099-1',
@@ -375,8 +554,15 @@ export const CASES: ClinicalCase[] = [
         kind: 'clinical_note',
         timestamp: D('2026-09-25'),
         author: '咨询师 M',
-        content: '适应期，轻度焦虑，整体功能未受损。',
-        status: 'final',
+        topic: '适应期随访',
+        clientReport: '自述适应期，轻度焦虑，整体功能未受损。',
+        observation: '情绪平稳，表达清晰，资源丰富。',
+        assessmentSummary: 'PHQ-9 极小；GAD-7 极小。',
+        hypothesis: '当前为良性适应过程，无需强化干预。',
+        toConfirm: '—',
+        plan: '常规月度随访。',
+        workflow: 'confirmed',
+        revision: 1,
       },
       {
         id: 'phq-2099-2',

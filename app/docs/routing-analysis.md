@@ -17,6 +17,9 @@
 | `/` | `app/page.tsx` | Client | 首页 AI Agent 聊天界面，支持多模型（智谱 / DeepSeek / 豆包 / Claude / GPT）切换与图片输入 |
 | `/agent-demo` | `app/agent-demo/page.tsx` | Client | AI 生成 UI Demo（列表 / 图表 / 表格 / 信息卡片的 ```` ```ui JSON ```` 渲染） |
 | `/flow-state` | `app/flow-state/page.tsx` | Client | "心流状态" 3D 可视化（React Three Fiber） |
+| `/flow` | `app/flow/page.tsx` | Client | "心流空间" 个人专注/冥想 3D 应用（R3F，会话状态机：进入→专注→暂停→完成，本地历史记录） |
+| `/flow/history` | `app/flow/history/page.tsx` | Client | 心流空间本地会话历史记录列表 |
+| `/clinical` | `app/clinical/page.tsx` | Client | Flow Space Clinical：面向心理专业人员的双端工作台。专业侧为 3D 可追溯状态空间（时间轨道 + 证据面板 + 2D 回退）；来访者侧为记录端（快速状态 / 心理事件卡 / 标准化量表填写）。记录体系含 5 类：日常状态、标准化量表、关键事件、专业观察、风险复核。 |
 | `/mental-universe` | `app/mental-universe/page.tsx` | Client | "心智宇宙" 3D 场景（动态导入 `MentalUniverse` 组件） |
 | `/multimedia-demo` | `app/multimedia-demo/page.tsx` | Client | 多模态 Demo：图像生成 / 图像分析 / 语音识别 / 语音合成 |
 | `/neural-state-space` | `app/neural-state-space/page.tsx` | Client | 神经状态空间 3D 可视化，含问卷驱动的参数生成 |
@@ -33,7 +36,7 @@
 | `/test-camera` | `app/test-camera/page.tsx` | Client | 摄像头调用测试页（状态机：idle/starting/running/error） |
 | `/docs` | `app/docs/` | — | **当前仅含文档，无 `page.tsx`，尚不可访问为页面** |
 
-> 共 17 个可访问页面路由 + 1 个文档目录（`/docs` 暂无页面）。
+> 共 20 个可访问页面路由 + 1 个文档目录（`/docs` 暂无页面）。
 
 ## 3. API 路由表（Route Handlers）
 
@@ -66,4 +69,4 @@
 
 ## 6. 小结
 
-本项目是一个以 **AI 对话 + 3D 心理/神经可视化** 为主题的演示型应用，采用典型 App Router 扁平结构（无动态段 / 无嵌套布局），通过 17 个页面路由与 4 个 API 路由组织功能，3D 与流式能力是核心架构关注点。
+本项目是一个以 **AI 对话 + 3D 心理/神经可视化** 为主题的演示型应用，采用典型 App Router 扁平结构（无动态段 / 无嵌套布局），通过 20 个页面路由与 4 个 API 路由组织功能，3D 与流式能力是核心架构关注点。

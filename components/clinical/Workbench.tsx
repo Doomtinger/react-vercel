@@ -2,7 +2,7 @@
 
 import { Component, type ReactNode, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { EvidencePanel, Timeline2D } from './ui';
+import { EvidencePanel, Timeline2D, AIAssistPanel } from './ui';
 import { METRIC_OPTIONS, type CaseRecord, type ClinicalCase, type MetricOption, type NoteWorkflow } from './data';
 
 const StateSpace3D = dynamic(() => import('./StateSpace3D'), { ssr: false, loading: () => null });
@@ -156,6 +156,26 @@ function ProRiskModal({ clinicalCase, onAdd, onClose }: { clinicalCase: Clinical
   );
 }
 
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="flex flex-1 flex-col gap-0.5 border-r border-white/5 px-4 py-2 last:border-r-0">
+      <span className="text-[10px] uppercase tracking-wide text-white/40">{label}</span>
+      <span className="text-lg font-semibold leading-none text-white/90">{value}</span>
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 px-3 py-2 text-xs transition ${active ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Workbench({
   clinicalCase,
   selectedId,
@@ -184,6 +204,7 @@ export default function Workbench({
   const [showRisk, setShowRisk] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [showEvidence, setShowEvidence] = useState(true);
+  const [sideTab, setSideTab] = useState<'evidence' | 'ai'>('evidence');
 
   useEffect(() => {
     if (!playing) return;
@@ -212,7 +233,10 @@ export default function Workbench({
 
   const handleSelect = (id: string | null) => {
     onSelect(id);
-    if (id) setShowEvidence(true);
+    if (id) {
+      setShowEvidence(true);
+      setSideTab('evidence');
+    }
   };
 
   return (
@@ -279,6 +303,13 @@ export default function Workbench({
         </div>
       </header>
 
+      <div className="flex shrink-0 border-b border-white/10 bg-[#0a0f1c] text-white/70">
+        <Stat label="评估次数" value={records.filter((r) => r.kind === 'assessment').length} />
+        <Stat label="事件记录" value={records.filter((r) => r.kind === 'life_event').length} />
+        <Stat label="待复核" value={records.filter((r) => r.workflow === 'pending_review').length} />
+        <Stat label="工作流状态" value={clinicalCase.status} />
+      </div>
+
       {collapsed ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#0a0f1c] px-5 py-1.5 text-xs text-white/60">
           <button onClick={() => setCollapsed(false)} className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-white/70 hover:bg-white/5" title="展开顶部工具栏">
@@ -343,7 +374,7 @@ export default function Workbench({
       )}
 
       <div className="relative flex min-h-0 flex-1">
-        <div className="relative min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
           {effectiveView === '3d' ? (
             <WebGLBoundary onFail={() => setWebglFailed(true)}>
               <StateSpace3D
@@ -366,21 +397,37 @@ export default function Workbench({
           )}
         </div>
 
-        {showEvidence && <EvidencePanel record={selectedRecord} onClose={() => onSelect(null)} onCollapse={() => setShowEvidence(false)} />}
+        {showEvidence ? (
+          <aside className="flex w-80 shrink-0 flex-col border-l border-white/10 bg-[#0c1322]">
+            <div className="flex shrink-0 border-b border-white/10">
+              <TabBtn active={sideTab === 'evidence'} onClick={() => setSideTab('evidence')}>
+                证据详情
+              </TabBtn>
+              <TabBtn active={sideTab === 'ai'} onClick={() => setSideTab('ai')}>
+                AI 辅助观察
+              </TabBtn>
+            </div>
+            <div className="relative min-h-0 flex-1">
+              {sideTab === 'evidence' ? (
+                <EvidencePanel record={selectedRecord} onClose={() => onSelect(null)} onCollapse={() => setShowEvidence(false)} />
+              ) : (
+                <AIAssistPanel records={records} />
+              )}
+            </div>
+          </aside>
+        ) : (
+          <button
+            onClick={() => setShowEvidence(true)}
+            className="flex w-10 shrink-0 flex-col items-center justify-center gap-2 border-l border-white/10 bg-[#0c1322] text-white/60 transition hover:bg-white/5 hover:text-white/90"
+            title="展开证据面板"
+          >
+            <span className="text-base leading-none">‹</span>
+            <span className="text-xs" style={{ writingMode: 'vertical-rl' }}>
+              证据面板
+            </span>
+          </button>
+        )}
       </div>
-
-      {!showEvidence && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowEvidence(true);
-          }}
-          className="pointer-events-auto absolute right-3 top-24 z-30 rounded-lg border border-white/10 bg-black/50 px-3 py-1.5 text-xs text-white/80 backdrop-blur hover:bg-white/10"
-          title="展开证据面板"
-        >
-          › 证据面板
-        </button>
-      )}
 
       {showNote && <ProNoteModal clinicalCase={clinicalCase} onAdd={onAdd} onClose={() => setShowNote(false)} />}
       {showRisk && <ProRiskModal clinicalCase={clinicalCase} onAdd={onAdd} onClose={() => setShowRisk(false)} />}

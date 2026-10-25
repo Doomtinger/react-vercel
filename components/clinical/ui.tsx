@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode } from 'react';
-import { CASES, fmtDate, fmtDateTime, recordCategoryLabel, type CaseRecord, type ClinicalCase, type NoteWorkflow } from './data';
+import { useState, useMemo, type ReactNode } from 'react';
+import { CASES, deriveThemes, fmtDate, fmtDateTime, recordCategoryLabel, type AITheme, type CaseRecord, type ClinicalCase, type NoteWorkflow } from './data';
 
 const KIND_BADGE: Record<CaseRecord['kind'], string> = {
   assessment: 'bg-[#7894FF]/20 text-[#9DB0FF]',
@@ -85,7 +85,7 @@ export function CaseList({
 export function EvidencePanel({ record, onClose, onCollapse }: { record: CaseRecord | null; onClose?: () => void; onCollapse?: () => void }) {
   if (!record) {
     return (
-      <aside className="relative flex w-80 shrink-0 flex-col border-l border-white/10 bg-[#0c1322] p-4">
+      <div className="relative flex h-full flex-col p-4">
         {onCollapse && (
           <button onClick={onCollapse} className="absolute right-3 top-3 rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/60 hover:bg-white/10" title="收起面板">
             ‹
@@ -93,12 +93,12 @@ export function EvidencePanel({ record, onClose, onCollapse }: { record: CaseRec
         )}
         <div className="text-sm text-white/50">选择左侧任一节点查看证据来源</div>
         <Legend />
-      </aside>
+      </div>
     );
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-white/10 bg-[#0c1322]">
+    <div className="flex h-full flex-col overflow-y-auto">
       <div className="border-b border-white/10 p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -251,7 +251,7 @@ export function EvidencePanel({ record, onClose, onCollapse }: { record: CaseRec
           <div className="mt-0.5 text-white/40">3D 中的形状 / 颜色仅用于信息组织，不代表诊断。</div>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -310,6 +310,151 @@ export function Timeline2D({
             <WorkflowBadge r={r} />
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+type ThemeStatus = 'pending' | 'adopted' | 'rejected' | 'edited';
+
+const STATUS_META: Record<ThemeStatus, { t: string; c: string }> = {
+  pending: { t: '待处理', c: 'bg-white/10 text-white/50' },
+  adopted: { t: '已采纳', c: 'bg-[#7FE0A0]/20 text-[#9FE9BD]' },
+  rejected: { t: '已拒绝', c: 'bg-[#E5484D]/20 text-[#F08A8D]' },
+  edited: { t: '已编辑', c: 'bg-[#7894FF]/20 text-[#9DB0FF]' },
+};
+
+const UNCERTAINTY_META: Record<AITheme['uncertainty'], string> = {
+  低: 'bg-[#7FE0A0]/20 text-[#9FE9BD]',
+  中: 'bg-[#E0A458]/20 text-[#F0C078]',
+  高: 'bg-[#E5484D]/20 text-[#F08A8D]',
+};
+
+function ThemeCard({
+  theme,
+  st,
+  onAdopt,
+  onReject,
+  onSave,
+  onUndo,
+}: {
+  theme: AITheme;
+  st: { status: ThemeStatus; text?: string; log: { action: string; at: number }[] };
+  onAdopt: () => void;
+  onReject: () => void;
+  onSave: (text: string) => void;
+  onUndo: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(st.text ?? theme.title);
+  const sm = STATUS_META[st.status];
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-sm leading-snug text-white/90">
+          {editing ? (
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="w-full rounded-md border border-white/10 bg-black/30 p-2 text-sm text-white/90 outline-none"
+              rows={2}
+            />
+          ) : (
+            st.text ?? theme.title
+          )}
+        </div>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${sm.c}`}>{sm.t}</span>
+      </div>
+
+      <div className="mt-1.5 text-[11px] leading-relaxed text-white/50">
+        不确定性：
+        <span className={`ml-1 rounded px-1 py-0.5 text-[10px] ${UNCERTAINTY_META[theme.uncertainty]}`}>{theme.uncertainty}</span>
+        <span className="ml-1">{theme.rationale}</span>
+      </div>
+
+      <div className="mt-2 space-y-1">
+        {theme.sources.map((s, i) => (
+          <div key={i} className="flex gap-2 text-[10px] text-white/40">
+            <span className="shrink-0 text-white/60">{s.kind}</span>
+            <span className="shrink-0">{s.date}</span>
+            <span className="min-w-0 truncate">{s.note}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        {!editing ? (
+          <>
+            <button onClick={onAdopt} className="rounded-md bg-[#7FE0A0]/20 px-2.5 py-1 text-[11px] text-[#9FE9BD] hover:bg-[#7FE0A0]/30">
+              采纳
+            </button>
+            <button onClick={onReject} className="rounded-md bg-[#E5484D]/15 px-2.5 py-1 text-[11px] text-[#F08A8D] hover:bg-[#E5484D]/25">
+              拒绝
+            </button>
+            <button onClick={() => { setDraft(st.text ?? theme.title); setEditing(true); }} className="rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/5">
+              编辑
+            </button>
+            {st.status !== 'pending' && (
+              <button onClick={onUndo} className="rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-white/40 hover:bg-white/5">
+                撤销
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button onClick={() => { onSave(draft); setEditing(false); }} className="rounded-md bg-[#7894FF] px-2.5 py-1 text-[11px] font-medium text-[#070B14]">
+              保存
+            </button>
+            <button onClick={() => setEditing(false)} className="rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/5">
+              取消
+            </button>
+          </>
+        )}
+      </div>
+
+      {st.log.length > 0 && (
+        <div className="mt-2 border-t border-white/5 pt-2 text-[10px] text-white/30">
+          操作记录：{st.log.slice().reverse().map((l) => `${fmtDateTime(l.at)} ${l.action}`).join(' · ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AIAssistPanel({ records }: { records: CaseRecord[] }) {
+  const themes = useMemo(() => deriveThemes(records), [records]);
+  const [statusMap, setStatusMap] = useState<Record<string, { status: ThemeStatus; text?: string; log: { action: string; at: number }[] }>>({});
+
+  const update = (id: string, patch: Partial<{ status: ThemeStatus; text: string }>, action: string) =>
+    setStatusMap((prev) => {
+      const cur = prev[id] ?? { status: 'pending' as ThemeStatus, log: [] as { action: string; at: number }[] };
+      return { ...prev, [id]: { ...cur, ...patch, log: [...cur.log, { action, at: Date.now() }] } };
+    });
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-white/10 p-4">
+        <div className="text-sm font-medium text-white/90">AI 辅助观察</div>
+        <div className="mt-1 text-[11px] leading-relaxed text-white/40">
+          AI 不做诊断，仅基于现有记录提示可能值得探索的主题。每条均标注来源与不确定性，可采纳、编辑或拒绝，并保留操作记录。
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        {themes.length === 0 ? (
+          <div className="text-xs text-white/40">暂无足够记录生成观察建议。</div>
+        ) : (
+          themes.map((t) => (
+            <ThemeCard
+              key={t.id}
+              theme={t}
+              st={statusMap[t.id] ?? { status: 'pending', log: [] }}
+              onAdopt={() => update(t.id, { status: 'adopted' }, '采纳')}
+              onReject={() => update(t.id, { status: 'rejected' }, '拒绝')}
+              onSave={(text) => update(t.id, { status: 'edited', text }, '编辑并保存')}
+              onUndo={() => update(t.id, { status: 'pending' }, '撤销')}
+            />
+          ))
+        )}
       </div>
     </div>
   );

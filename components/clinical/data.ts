@@ -246,6 +246,111 @@ export function fmtDateTime(ts: number): string {
   return `${fmtDate(ts)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// AI 辅助观察：基于现有记录生成“可能值得探索的主题”（纯前端样例，不做诊断）
+export interface AISource {
+  kind: string;
+  date: string;
+  note: string;
+}
+export interface AITheme {
+  id: string;
+  title: string;
+  uncertainty: '低' | '中' | '高';
+  rationale: string;
+  sources: AISource[];
+}
+
+export function deriveThemes(records: CaseRecord[]): AITheme[] {
+  const sorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
+  const themes: AITheme[] = [];
+
+  // 1) 待复核：工作流程提醒，非临床推断
+  const pending = sorted.filter((r) => r.workflow === 'pending_review');
+  if (pending.length) {
+    themes.push({
+      id: 'pending',
+      title: `有待复核记录 ${pending.length} 条，建议优先核实`,
+      uncertainty: '低',
+      rationale: '基于界面状态标记，属于工作流程提醒，系统不据此做临床推断。',
+      sources: pending.map((r) => ({ kind: recordCategoryLabel(r), date: fmtDate(r.timestamp), note: '状态：待复核' })),
+    });
+  }
+
+  // 2) 日常状态中反复出现的情绪标签
+  const feelingCount: Record<string, number> = {};
+  const feelingRecs: Record<string, CaseRecord[]> = {};
+  for (const r of sorted) {
+    if (r.kind === 'daily_state') {
+      for (const f of r.feelings) {
+        feelingCount[f] = (feelingCount[f] ?? 0) + 1;
+        (feelingRecs[f] = feelingRecs[f] ?? []).push(r);
+      }
+    }
+  }
+  for (const [f, n] of Object.entries(feelingCount)) {
+    if (n >= 2) {
+      themes.push({
+        id: `feeling-${f}`,
+        title: `来访者多次记录到「${f}」情绪（共 ${n} 次）`,
+        uncertainty: '中',
+        rationale: '来自来访者日常自述，反映主观体验的重复性，建议作为会谈切入点，但不构成诊断。',
+        sources: feelingRecs[f].map((r) => ({ kind: '日常状态', date: fmtDate(r.timestamp), note: `感受包含「${f}」` })),
+      });
+    }
+  }
+
+  // 3) 风险复核：需专业人员按流程核实与处置
+  for (const r of sorted) {
+    if (r.kind === 'risk_review') {
+      themes.push({
+        id: `risk-${r.id}`,
+        title: '存在风险复核记录，需确认处置与跟进闭环',
+        uncertainty: '低',
+        rationale: '风险复核需专业人员按流程核实与处置；系统仅呈现记录，不自动判定风险等级。',
+        sources: [{ kind: '风险复核', date: fmtDate(r.timestamp), note: r.signalSource }],
+      });
+    }
+  }
+
+  // 4) 同工具两次评估的分数变化（仅提示，不结论）
+  const byInstrument: Record<string, CaseRecord[]> = {};
+  for (const r of sorted) {
+    if (r.kind === 'assessment') (byInstrument[r.instrument] = byInstrument[r.instrument] ?? []).push(r);
+  }
+  for (const [inst, arr] of Object.entries(byInstrument)) {
+    if (arr.length >= 2) {
+      const first = arr[0];
+      const last = arr[arr.length - 1];
+      if (last.rawScore > first.rawScore) {
+        themes.push({
+          id: `trend-${inst}`,
+          title: `${inst} 分数较首次上升（${first.rawScore} → ${last.rawScore}）`,
+          uncertainty: '中',
+          rationale: '仅比较同工具两次得分，提示需要结合情境与专业判断，不可单独作为结论。',
+          sources: [
+            { kind: '量表评估', date: fmtDate(first.timestamp), note: `${inst} ${first.rawScore} 分（${severityFromScore(inst, first.rawScore)}）` },
+            { kind: '量表评估', date: fmtDate(last.timestamp), note: `${inst} ${last.rawScore} 分（${severityFromScore(inst, last.rawScore)}）` },
+          ],
+        });
+      }
+    }
+  }
+
+  // 5) 关键事件：提供可进一步询问的具体材料
+  const events = sorted.filter((r) => r.kind === 'life_event');
+  if (events.length) {
+    themes.push({
+      id: 'events',
+      title: `记录到 ${events.length} 次关键事件，建议结合情境探索`,
+      uncertainty: '中',
+      rationale: '事件卡提供可进一步询问的具体材料；系统不将单一事件直接判定为症状原因。',
+      sources: events.map((r) => ({ kind: '关键事件', date: fmtDate(r.timestamp), note: r.situation.slice(0, 24) })),
+    });
+  }
+
+  return themes;
+}
+
 const D = (s: string) => new Date(s + 'T09:00:00').getTime();
 
 export const CASES: ClinicalCase[] = [

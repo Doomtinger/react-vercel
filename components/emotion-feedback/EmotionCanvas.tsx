@@ -12,16 +12,16 @@
  * - 呼吸交互：按住画布产生临时形变（自转减速/外扩/散开/膨起），仅作用于展示层，
  *   不修改任何记录参数，松开后缓动恢复；柔和模式形变减半；
  * - 速度档位：慢 0.5 / 标准 1 / 快 1.6，柔和模式锁定最慢；时钟按 dt 积分，变速不跳帧；
- * - 分层点击：点击任一图层触发回调（螺旋类主层区分外圈 / 中心区域）。
+ * - 分层点击隐喻：仅复合图形有热区（由 hotspotLayers 指定，最多 3 个），PC 悬浮 / 移动端
+ *   长按 0.5s 显示静态微弱光晕（柔和模式更弱、不闪烁），点击触发回调；非热区层不拦截指针。
  */
 
-import { useEffect, useMemo, useRef, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CALM_ACCENT,
   EXCITED_ACCENT,
   INTENSITY_RULES,
   safeCategoryRule,
-  type ClickZone,
   type EmotionCategory,
   type IntensityLevel,
   type ShapeForm,
@@ -53,8 +53,10 @@ interface Props {
   held?: boolean;
   /** 动画速度档位倍率：慢 0.5 / 标准 1 / 快 1.6（柔和模式锁定最慢） */
   speed?: number;
-  /** 图形分层点击隐喻：cat 为被点击图层的情绪类别，zone 为点击区域 */
-  onLayerClick?: (cat: EmotionCategory, zone: ClickZone) => void;
+  /** 分层热区层索引（仅复合图形传入；缺省/空 = 无热区：悬浮无光晕、点击无响应） */
+  hotspotLayers?: number[];
+  /** 点击热区回调（参数为渲染层索引）；不传时热区全部关闭 */
+  onLayerClick?: (layerIndex: number) => void;
 }
 
 function levelIdx(intensity: IntensityLevel): number {
@@ -224,7 +226,10 @@ function EmotionFormLayer({
   uid,
   held = false,
   speed = 1,
-  onLayerClick,
+  hotzone = false,
+  glow = false,
+  onGlow,
+  onSelect,
 }: {
   spec: LayerSpec;
   params: ShapeParams;
@@ -232,7 +237,12 @@ function EmotionFormLayer({
   uid: string;
   held?: boolean;
   speed?: number;
-  onLayerClick?: (spec: LayerSpec, e: MouseEvent<SVGGElement>) => void;
+  /** 是否为分层热区（仅复合图形的模板库结构层） */
+  hotzone?: boolean;
+  /** 当前是否处于悬浮/长按光晕状态 */
+  glow?: boolean;
+  onGlow?: (on: boolean) => void;
+  onSelect?: () => void;
 }) {
   const groupRef = useRef<SVGGElement | null>(null);
   const nodeRefs = useRef<(SVGElement | null)[]>([]);
@@ -246,6 +256,21 @@ function EmotionFormLayer({
   useEffect(() => {
     speedRef.current = speedMul;
   }, [speedMul]);
+
+  // 移动端长按 0.5s 触发光晕；PC 悬浮即触发光晕
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (pressTimer.current !== null) clearTimeout(pressTimer.current);
+    },
+    []
+  );
+  const clearPress = () => {
+    if (pressTimer.current !== null) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
 
   const level = INTENSITY_RULES[params.intensity];
   const li = levelIdx(params.intensity);
@@ -387,8 +412,44 @@ function EmotionFormLayer({
     <g
       transform={`scale(${spec.scale})`}
       opacity={spec.layerOpacity}
-      className="cursor-pointer"
-      onClick={(e) => onLayerClick?.(spec, e)}
+      style={{
+        // 非热区层不拦截指针：悬浮无光晕、点击无响应；热区无默认边框高亮
+        pointerEvents: hotzone ? undefined : 'none',
+        cursor: hotzone ? 'pointer' : undefined,
+        // 光晕为静态微弱发光，不闪烁；柔和模式亮度进一步降低
+        filter: glow
+          ? softMode
+            ? 'drop-shadow(0 0 6px rgba(255, 255, 255, 0.16))'
+            : 'drop-shadow(0 0 10px rgba(255, 255, 255, 0.32))'
+          : undefined,
+      }}
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') onGlow?.(true); // PC 悬浮 → 微弱淡光晕
+      }}
+      onPointerLeave={() => {
+        clearPress();
+        onGlow?.(false);
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'mouse') {
+          // 移动端：触摸长按 0.5s 触发光晕
+          clearPress();
+          pressTimer.current = setTimeout(() => onGlow?.(true), 500);
+        }
+      }}
+      onPointerUp={(e) => {
+        clearPress();
+        if (e.pointerType !== 'mouse') onGlow?.(false); // 触摸抬起即熄灭，鼠标由 Leave 处理
+      }}
+      onPointerCancel={() => {
+        clearPress();
+        onGlow?.(false);
+      }}
+      onClick={(e) => {
+        if (!hotzone) return;
+        e.stopPropagation();
+        onSelect?.();
+      }}
     >
       <g ref={groupRef}>
         {/* 云雾形态：柔和无棱角流体面片，边缘消融 */}
@@ -487,33 +548,21 @@ function EmotionFormLayer({
   );
 }
 
-export default function EmotionCanvas({ params, softMode = false, held = false, speed = 1, onLayerClick }: Props) {
+export default function EmotionCanvas({
+  params,
+  softMode = false,
+  held = false,
+  speed = 1,
+  hotspotLayers,
+  onLayerClick,
+}: Props) {
   const layers = useMemo(() => buildLayers(params), [params]);
   const uid = `ef${params.seed % 100000}`;
-  const svgRef = useRef<SVGSVGElement | null>(null);
-
-  /** 图层点击 → 换算 viewBox 坐标判定区域：螺旋类主层分外圈/中心，其余整层 */
-  const handleLayerClick = (spec: LayerSpec, e: MouseEvent<SVGGElement>) => {
-    if (!onLayerClick) return;
-    e.stopPropagation();
-    let zone: ClickZone = 'layer';
-    if (spec.role === 'primary' && (spec.form === 'spiral' || spec.form === 'conflict-spiral') && svgRef.current) {
-      const rect = svgRef.current.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const vx = ((e.clientX - rect.left) / rect.width) * (HALF * 2) - HALF;
-        const vy = ((e.clientY - rect.top) / rect.height) * (HALF * 2) - HALF;
-        zone = Math.hypot(vx, vy) > 72 ? 'outer' : 'center';
-      }
-    }
-    onLayerClick(spec.cat, zone);
-  };
+  const [glowIdx, setGlowIdx] = useState<number | null>(null);
+  const hotspots = hotspotLayers ?? [];
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`}
-      className="w-full h-full block"
-    >
+    <svg viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`} className="w-full h-full block">
       <defs>
         {/* 统一低饱和中性底色，仅中心留极微弱主色晕染，不抢图形 */}
         <radialGradient id={`${uid}bg`} cx="50%" cy="44%" r="72%">
@@ -539,7 +588,10 @@ export default function EmotionCanvas({ params, softMode = false, held = false, 
           uid={`${uid}l${i}`}
           held={held}
           speed={speed}
-          onLayerClick={handleLayerClick}
+          hotzone={onLayerClick !== undefined && hotspots.includes(i)}
+          glow={glowIdx === i}
+          onGlow={(on) => setGlowIdx((cur) => (on ? i : cur === i ? null : cur))}
+          onSelect={() => onLayerClick?.(i)}
         />
       ))}
     </svg>

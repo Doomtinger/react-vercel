@@ -27,7 +27,7 @@ import {
   INTENSITY_RULES,
   containsCrisisSignal,
   appendBodyNote,
-  layerMetaphor,
+  resolveLayerDocs,
   awarenessPrompts,
   flowNote,
   buildTransitionHint,
@@ -37,6 +37,8 @@ import {
   type ShapeParams,
   type EmotionCategory,
   type IntensityLevel,
+  type LayerDoc,
+  type ResolvedLayerDoc,
 } from '@/components/emotion-feedback/mapping';
 
 interface HistoryRecord {
@@ -51,12 +53,15 @@ interface HistoryRecord {
   triggerTags: string[]; // 触发类型标签（仅元数据，不参与形态判定）
   bodyTags: string[]; // 躯体感受标签（仅元数据，解读中温和引用）
   transitionHint?: string; // 与上一条记录的中性变化提示
+  layerDocs?: ResolvedLayerDoc[]; // 分层释义版本快照（旧记录无此字段时按当前规则实时解析）
+  layerViewed?: boolean; // 仅记录是否点击过分层（不收集反馈、不做情绪判断）
 }
 
 const STORAGE_KEY = 'emotion-feedback-history-v1';
+const SETTINGS_KEY = 'emotion-feedback-settings-v1';
 const INTENSITY_ORDER: IntensityLevel[] = ['light', 'medium', 'heavy'];
 
-/** 历史记录兼容：旧版本记录缺少 v1.4 字段时补默认值，不崩溃、不重绘 */
+/** 历史记录兼容：旧版本记录缺少 v1.4/v1.5 字段时补默认值，不崩溃、不重绘 */
 function normalizeRecord(r: HistoryRecord): HistoryRecord {
   return {
     ...r,
@@ -64,6 +69,8 @@ function normalizeRecord(r: HistoryRecord): HistoryRecord {
     triggerTags: Array.isArray(r.triggerTags) ? r.triggerTags : [],
     bodyTags: Array.isArray(r.bodyTags) ? r.bodyTags : [],
     transitionHint: typeof r.transitionHint === 'string' ? r.transitionHint : undefined,
+    layerDocs: Array.isArray(r.layerDocs) ? r.layerDocs : undefined,
+    layerViewed: typeof r.layerViewed === 'boolean' ? r.layerViewed : false,
   };
 }
 
@@ -141,8 +148,12 @@ export default function EmotionFeedbackPage() {
   const [crisis, setCrisis] = useState(false);
   const [held, setHeld] = useState(false);
   const [speed, setSpeed] = useState(1); // 0.5 慢 / 1 标准 / 1.6 快
-  const [layerInfo, setLayerInfo] = useState<string | null>(null);
+  const [bubble, setBubble] = useState<LayerDoc | null>(null); // 分层释义气泡，用户主动点击才出现
   const [showPrompts, setShowPrompts] = useState(false);
+
+  // 全局开关（个人设置）
+  const [layerDocsOn, setLayerDocsOn] = useState(true);
+  const [promptsOn, setPromptsOn] = useState(true);
 
   const effSpeed = softMode ? 0.5 : speed; // 柔和模式锁定最慢
 
@@ -161,6 +172,16 @@ export default function EmotionFeedbackPage() {
     } catch {
       // 忽略本地存储读取失败
     }
+    try {
+      const rawSettings = localStorage.getItem(SETTINGS_KEY);
+      if (rawSettings) {
+        const parsed = JSON.parse(rawSettings) as { layerDocsOn?: boolean; promptsOn?: boolean };
+        if (typeof parsed.layerDocsOn === 'boolean') setLayerDocsOn(parsed.layerDocsOn);
+        if (typeof parsed.promptsOn === 'boolean') setPromptsOn(parsed.promptsOn);
+      }
+    } catch {
+      // 忽略设置读取失败
+    }
     setHydrated(true);
   }, []);
 
@@ -172,6 +193,15 @@ export default function EmotionFeedbackPage() {
       // 忽略本地存储写入失败
     }
   }, [history, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layerDocsOn, promptsOn }));
+    } catch {
+      // 忽略设置写入失败
+    }
+  }, [layerDocsOn, promptsOn, hydrated]);
 
   /** 识别（P0 第一步）：高危拦截优先级最高，阻断生成、不写入历史 */
   const handleRecognize = () => {
@@ -230,6 +260,38 @@ export default function EmotionFeedbackPage() {
     );
   }, [preview, adjustedSignal]);
 
+  /** 分层释义：优先用记录内版本快照（旧记录沿用当时文案），否则按当前规则实时解析 */
+  const activeLayerDocs = useMemo<ResolvedLayerDoc[]>(() => {
+    if (!current) return [];
+    if (Array.isArray(current.layerDocs) && current.layerDocs.length > 0) return current.layerDocs;
+    return resolveLayerDocs(current.params);
+  }, [current]);
+
+  const hotspotLayers = useMemo(
+    () => (layerDocsOn ? activeLayerDocs.map((d) => d.layerIndex) : []),
+    [layerDocsOn, activeLayerDocs]
+  );
+
+  /** 点击热区 → 展示气泡 + 静默记录「是否点击过分层」（不收集反馈、不做情绪判断） */
+  const handleLayerSelect = (layerIndex: number) => {
+    const doc = activeLayerDocs.find((d) => d.layerIndex === layerIndex);
+    if (!doc || !current) return;
+    setBubble({ key: doc.key, title: doc.title, text: doc.text });
+    if (!current.layerViewed) {
+      const updated = { ...current, layerViewed: true };
+      setCurrent(updated);
+      setHistory((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    }
+  };
+
+  /** 觉察问句：实时按当前图形规则渲染（柔和模式自动切柔和版）；默认版多条时按图形种子确定性轮换 1 条 */
+  const activePrompt = useMemo(() => {
+    if (!current) return '';
+    const list = awarenessPrompts(current.params.primary, softMode, current.params.compound);
+    if (list.length === 0) return '';
+    return list[current.params.seed % list.length];
+  }, [current, softMode]);
+
   const commitRecord = (text: string, signal: EmotionSignal, source: 'auto' | 'manual') => {
     const params = mapToShapeParams(signal);
     let interpretation = buildInterpretation(signal);
@@ -255,11 +317,14 @@ export default function EmotionFeedbackPage() {
       triggerTags: selTriggers,
       bodyTags: selBodies,
       transitionHint,
+      // 分层释义版本快照：手动微调后跟随新图形结构，旧记录不受后续模板迭代影响
+      layerDocs: resolveLayerDocs({ primary: params.primary, compound: params.compound, form: params.form }),
+      layerViewed: false,
     };
     setHistory((p) => [record, ...p].slice(0, 20));
     setCurrent(record);
     setPreview(null);
-    setLayerInfo(null);
+    setBubble(null);
   };
 
   const handlePresetSelect = (text: string) => {
@@ -528,6 +593,37 @@ export default function EmotionFeedbackPage() {
           </button>
         </div>
 
+        {/* 个人设置：全局开关（关闭后对应能力完全无响应/不展示） */}
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">个人设置</span>
+          <button
+            onClick={() => {
+              setLayerDocsOn((v) => !v);
+              setBubble(null);
+            }}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              layerDocsOn
+                ? 'bg-purple-500/15 border-purple-400/30 text-purple-300'
+                : 'bg-white/5 border-white/15 text-gray-500'
+            }`}
+          >
+            🫧 图形分层释义{layerDocsOn ? ' · 开' : ' · 关'}
+          </button>
+          <button
+            onClick={() => {
+              setPromptsOn((v) => !v);
+              setShowPrompts(false);
+            }}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              promptsOn
+                ? 'bg-sky-500/15 border-sky-400/30 text-sky-300'
+                : 'bg-white/5 border-white/15 text-gray-500'
+            }`}
+          >
+            💭 觉察问句{promptsOn ? ' · 开' : ' · 关'}
+          </button>
+        </div>
+
         {/* 当前记录的结构化参数 */}
         {current && (
           <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
@@ -625,7 +721,7 @@ export default function EmotionFeedbackPage() {
                   key={rec.id}
                   onClick={() => {
                     setCurrent(rec);
-                    setLayerInfo(null);
+                    setBubble(null);
                   }}
                   className={`w-full text-left p-3 rounded-lg border transition-colors ${
                     current?.id === rec.id
@@ -732,8 +828,9 @@ export default function EmotionFeedbackPage() {
 
             <div className="w-full max-w-[560px]">
               <div
-                className="aspect-square w-full rounded-2xl overflow-hidden select-none"
+                className="relative aspect-square w-full rounded-2xl overflow-hidden select-none"
                 style={{ backgroundColor: current.params.bgTint, touchAction: 'none' }}
+                onClick={() => setBubble(null)} // 点击空白收起气泡
                 onPointerDown={(e) => {
                   e.preventDefault();
                   setHeld(true);
@@ -747,8 +844,28 @@ export default function EmotionFeedbackPage() {
                   softMode={softMode}
                   held={held}
                   speed={effSpeed}
-                  onLayerClick={(cat, zone) => setLayerInfo(layerMetaphor(cat, zone))}
+                  hotspotLayers={hotspotLayers}
+                  onLayerClick={layerDocsOn ? handleLayerSelect : undefined}
                 />
+                {/* 分层释义气泡：图形侧边轻量卡片（圆角低灰度、文字小于主解读），切换热区自动替换 */}
+                {bubble && layerDocsOn && (
+                  <div
+                    className="absolute left-3 top-3 w-[230px] p-3 rounded-xl bg-slate-800/90 border border-white/10 shadow-lg"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-200">{bubble.title}</span>
+                      <button
+                        onClick={() => setBubble(null)}
+                        className="text-gray-500 hover:text-gray-300 text-sm leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 leading-relaxed">{bubble.text}</p>
+                    <p className="text-[9px] text-gray-600 mt-1.5">图形结构的隐喻说明，不代表任何诊断或评判。</p>
+                  </div>
+                )}
               </div>
               {/* 版本号走常规流放在画布下方右对齐，不再负偏移压住上方提示文字 */}
               <div className="mt-2 text-right text-xs font-mono text-gray-500">
@@ -761,20 +878,6 @@ export default function EmotionFeedbackPage() {
               <p className="w-full max-w-[560px] mt-3 text-xs text-amber-300/80">
                 该记录由旧版映射规则（{current.version}）生成，其形态已退役——原始参数与色彩已保留，不再重绘几何。
               </p>
-            )}
-
-            {/* P1 分层点击隐喻 */}
-            {layerInfo && (
-              <div className="w-full max-w-[560px] mt-3 p-3 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-start gap-2">
-                <span className="text-sm">🫧</span>
-                <p className="text-xs text-purple-200/90 leading-relaxed flex-1">{layerInfo}</p>
-                <button
-                  onClick={() => setLayerInfo(null)}
-                  className="text-purple-300/60 hover:text-purple-200 text-sm leading-none"
-                >
-                  ×
-                </button>
-              </div>
             )}
 
             {/* 隐喻解读（与映射规则绑定）+ 情绪流动注解 */}
@@ -818,31 +921,25 @@ export default function EmotionFeedbackPage() {
               </div>
             )}
 
-            {/* P1 觉察引导问句（可选 · 只提问不给答案 · 不做引导纠正） */}
-            <div className="w-full max-w-[560px] mt-3 rounded-xl bg-white/5 border border-white/10 overflow-hidden">
-              <button
-                onClick={() => setShowPrompts((v) => !v)}
-                className="w-full px-4 py-2.5 text-left text-xs text-gray-300 hover:text-white flex items-center justify-between transition-colors"
-              >
-                <span>💭 觉察问句（可选 · 不需要回答）</span>
-                <span className="text-gray-500">{showPrompts ? '收起' : '展开'}</span>
-              </button>
-              {showPrompts && (
-                <div className="px-4 pb-3.5">
-                  <ul className="space-y-1.5">
-                    {awarenessPrompts(current.params.primary).map((q) => (
-                      <li key={q} className="text-xs text-gray-400 leading-relaxed flex gap-1.5">
-                        <span className="text-gray-600">·</span>
-                        {q}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[10px] text-gray-600 mt-2">
-                    这些问句只是陪你停一停——没有标准答案，也不会被保存或分析。
-                  </p>
-                </div>
-              )}
-            </div>
+            {/* P1-02 觉察引导问句：默认收起，仅一行浅灰小字入口；全局开关关闭时不出现 */}
+            {promptsOn && activePrompt && (
+              <div className="w-full max-w-[560px] mt-3">
+                <button
+                  onClick={() => setShowPrompts((v) => !v)}
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {showPrompts ? '收起' : '查看觉察问句'}
+                </button>
+                {showPrompts && (
+                  <div className="mt-2 p-4 rounded-xl bg-white/5 border border-white/10">
+                    <p className="text-xs text-gray-400 leading-relaxed">{activePrompt}</p>
+                    <p className="text-[10px] text-gray-600 mt-2">
+                      问句只用于自我觉察：不需要回答、没有输入框，也不会被保存或分析。
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 结构摘要 chips */}
             <div className="w-full max-w-[560px] mt-3 mb-2 flex flex-wrap gap-2">
@@ -975,8 +1072,8 @@ export default function EmotionFeedbackPage() {
               <li>柔和模式全局降级：柔和模式下冲突拉扯（尖角）选项不可选，降级为反刍螺旋；</li>
               <li>呼吸交互：按住图形产生临时形变（螺旋减速外扩、云雾散开、团块膨起、波纹放缓），仅作用于展示层，不修改任何记录参数，松开缓动恢复，柔和模式形变减半；</li>
               <li>动画速度档位：慢 / 标准 / 快，柔和模式锁定最慢；变速不跳帧；</li>
-              <li>分层点击隐喻：点击图形任一图层可查看该层含义，螺旋类主层区分外圈与中心；</li>
-              <li>觉察问句：只提问、不给答案，不引导、不纠正，回答与否完全自愿，不会被保存或分析；</li>
+              <li>分层点击隐喻：仅复合图形支持（最多 3 个热区），PC 悬浮 / 移动端长按 0.5s 显示静态微弱光晕（柔和模式更弱、不闪烁），点击弹出「结构名称 + 固定隐喻文案」气泡，点击空白或关闭按钮收起；单一基础图形悬浮无光晕、点击无响应；释义文案随记录做版本快照，旧记录沿用当时文案；全局开关可一键关闭；</li>
+              <li>觉察问句：默认收起，仅展示一行【查看觉察问句】浅灰小字入口；按图形形态绑定模板库，柔和模式自动切换柔和版并缩减为 1 条；文案黑名单强制校验，杜绝说教评判话术；只提问、不给答案、无输入框，不会被保存或分析；全局开关可一键关闭；</li>
               <li>触发类型 / 躯体感受标签仅作为元数据记录，不影响图形渲染；躯体感受只在解读中温和引用，不做推断；</li>
               <li>与上一条记录的变化提示只做中性形态对比，不评判好坏，不做情绪评分或预测。</li>
             </ul>

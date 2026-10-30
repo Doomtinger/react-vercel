@@ -27,8 +27,11 @@
  *        开心/快乐/幸福等高唤起正面词自平静移入兴奋激昂
  * v1.4.0 增值能力：高危拦截、可选元数据标签（触发类型/躯体感受）、分层隐喻、
  *        觉察引导问句、情绪流动注解、中性变化提示、手动微调来源标记
+ * v1.5.0 P1 细化：分层释义改为「按图形结构」固定模板库（仅复合图形、最多 3 热区）；
+ *        觉察问句拆分默认版/柔和版双库 + 复合专属问句 + 文案黑名单强制校验；
+ *        分层释义文案随记录做版本快照，旧历史记录沿用当时文案
  */
-export const RULES_VERSION = 'v1.4.0';
+export const RULES_VERSION = 'v1.5.0';
 
 export type EmotionCategory = 'diffuse-low' | 'rumination' | 'conflict' | 'numbness' | 'excited' | 'calm';
 export type IntensityLevel = 'light' | 'medium' | 'heavy';
@@ -388,46 +391,194 @@ export function appendBodyNote(interpretation: string, bodyTags: string[]): stri
   return `${interpretation} ${notes.join('，')}。`;
 }
 
-/** 分层隐喻：点击图形对应区域弹出该层含义（复合图形可分层拆解） */
-export type ClickZone = 'layer' | 'outer' | 'center';
-
-const LAYER_METAPHOR: Record<EmotionCategory, { layer: string; outer?: string; center?: string }> = {
-  'diffuse-low': { layer: '向外漫开的雾：没有明确形状的沉重，在持续弥漫' },
-  rumination: {
-    layer: '向内收拢的螺旋：思绪反复绕回同一件事',
-    outer: '外圈螺旋：反复思虑循环',
-    center: '中心收拢：注意力持续收窄',
-  },
-  conflict: {
-    layer: '交织双带：难过与愤懑互相拉扯',
-    outer: '外圈双带：两种情绪互相缠绕',
-    center: '中心：对抗最紧的焦点',
-  },
-  numbness: { layer: '封闭的团块：感受暂时被隔绝在外' },
-  excited: { layer: '上升的光尘：雀跃的心情正在上扬' },
-  calm: { layer: '舒展的波纹：松弛正在向外扩散' },
-};
-
-export function layerMetaphor(cat: string, zone: ClickZone = 'layer'): string {
-  const m = (LAYER_METAPHOR as Record<string, { layer: string; outer?: string; center?: string } | undefined>)[cat]
-    ?? { layer: '这一层保留了你当时的图形参数' };
-  if (zone === 'outer' && m.outer) return m.outer;
-  if (zone === 'center' && m.center) return m.center;
-  return m.layer;
+/**
+ * P1-01 分层点击隐喻：文案模板库与图形结构一一绑定，每条结构只对应一条固定文案，
+ * 禁止自由生成；文案只解释图形象征，不引申诊断、不判断情绪是否正常。
+ */
+export interface LayerDoc {
+  key: string; // 结构标识（与热区绑定）
+  title: string; // 结构名称（气泡标题）
+  text: string; // 固定隐喻文案（气泡正文，1~2 句）
 }
 
-/** 觉察引导问句（与图形类型绑定；非说教、不给答案、不要求回答） */
-export const AWARENESS_PROMPTS: Record<EmotionCategory, string[]> = {
-  rumination: ['是什么想法，让你反复回到这里？', '这个想法是事实，还是脑海里的猜测？'],
-  'diffuse-low': ['这种沉重感，在身体的哪个位置？', '它是从什么时候开始弥漫的？'],
-  conflict: ['这两种感受，哪一个更早出现？', '它们各自想保护你什么？'],
-  numbness: ['是什么让你想要关上感受、保护自己？', '封闭的外壳之下，还有什么在等待？'],
-  excited: ['是什么让这份雀跃升起来的？', '这份心情，你最想和谁分享？'],
-  calm: ['是什么让你慢慢松下来？', '此刻的身体是什么感觉？'],
+export const LAYER_STRUCTURES: Record<string, LayerDoc> = {
+  'rumination-spiral': {
+    key: 'rumination-spiral',
+    title: '思虑循环',
+    text: '这一层螺旋，代表反复盘旋、不断回到同一件事的想法，注意力持续被这件事牵引。',
+  },
+  'wrap-cloud': {
+    key: 'wrap-cloud',
+    title: '弥散低落',
+    text: '这层薄雾代表弥散、没有明确源头的疲惫与沉重，情绪缓慢笼罩着你。',
+  },
+  'core-block': {
+    key: 'core-block',
+    title: '情绪隔离内核',
+    text: '中心封闭的团块，代表你内心筑起的保护，这部分感受暂时被隔绝、麻木。',
+  },
+  'conflict-spiral': {
+    key: 'conflict-spiral',
+    title: '拉扯对抗',
+    text: '交织的线条代表两种冲突的感受，委屈、不甘、愤怒互相拉扯。',
+  },
+  'wrap-mist': {
+    key: 'wrap-mist',
+    title: '疲惫底色',
+    text: '外层薄雾是持续的疲惫底色，在冲突之外，还有淡淡的耗竭感。',
+  },
+  'calm-ripple': {
+    key: 'calm-ripple',
+    title: '松动的感受',
+    text: '向外扩散的波纹，代表紧绷的感受正在慢慢拓宽、松动。',
+  },
 };
 
-export function awarenessPrompts(cat: string): string[] {
-  return (AWARENESS_PROMPTS as Record<string, string[]>)[cat] ?? ['此刻的你，注意到了什么？'];
+/** 单张图形最多 3 个分层热区，不再做更复杂多层，防止信息过载 */
+export const MAX_LAYER_HOTSPOTS = 3;
+
+export interface ResolvedLayerDoc extends LayerDoc {
+  layerIndex: number; // 渲染层索引（与 EmotionCanvas.buildLayers 顺序一一对应）
+}
+
+/**
+ * 解析复合图形的分层热区与释义文案。
+ * - 仅复合图形有热区；单一基础形态（纯云雾/纯螺旋/纯团块/纯波纹）不显示分层能力；
+ * - 层索引顺序与 buildLayers 一致：底层包裹流体 → 主层 → 顶层附属；
+ * - 不在模板库内的结构（如上升光尘）不设热区，但仍占据渲染层位；
+ * - 同结构只绑定一条文案，重复结构不重复设热区；
+ * - 返回结果已按 MAX_LAYER_HOTSPOTS 截断。
+ */
+export function resolveLayerDocs(params: { primary: string; compound: string[]; form: string }): ResolvedLayerDoc[] {
+  const docs: ResolvedLayerDoc[] = [];
+  const push = (key: string | null, layerIndex: number) => {
+    if (!key) return;
+    const doc = (LAYER_STRUCTURES as Record<string, LayerDoc | undefined>)[key];
+    if (!doc) return;
+    if (docs.some((d) => d.key === key)) return; // 同结构不重复设热区
+    docs.push({ ...doc, layerIndex });
+  };
+
+  // 底层：包裹流体（云雾 / 波纹 / 上升光尘），计数顺序与 buildLayers 的 back 数组一致
+  let backPos = 0;
+  params.compound.forEach((cat) => {
+    const rule = safeCategoryRule(cat);
+    if (!rule) return;
+    if (rule.form === 'cloud') {
+      // 冲突主形 + 云雾 = 薄雾包裹层（疲惫底色）；其余组合 = 外围云雾（弥散低落）
+      push(params.primary === 'conflict' ? 'wrap-mist' : 'wrap-cloud', backPos);
+      backPos++;
+    } else if (rule.form === 'ripple') {
+      push('calm-ripple', backPos);
+      backPos++;
+    } else if (rule.form === 'ascending') {
+      backPos++; // 占层位，无热区
+    }
+  });
+  const backCount = backPos;
+
+  if (params.compound.length === 0) return []; // 单一基础形态：无热区、悬浮无光晕、点击无响应
+
+  // 主层热区
+  if (params.form === 'spiral') push('rumination-spiral', backCount);
+  else if (params.form === 'conflict-spiral') push('conflict-spiral', backCount);
+  else if (params.form === 'ripple') push('calm-ripple', backCount);
+  else if (params.form === 'solid-block') push('core-block', backCount);
+  // 上升光尘作为主层：不在模板库内，不设热区
+
+  // 顶层：内核团块 / 交织螺旋附属层，计数顺序与 buildLayers 的 front 数组一致
+  let frontPos = 0;
+  params.compound.forEach((cat) => {
+    const rule = safeCategoryRule(cat);
+    if (!rule) return;
+    const form = rule.form;
+    if (form === 'solid-block') {
+      push('core-block', backCount + 1 + frontPos);
+      frontPos++;
+    } else if (form === 'spiral' || form === 'conflict-spiral') {
+      push('rumination-spiral', backCount + 1 + frontPos);
+      frontPos++;
+    }
+  });
+
+  return docs.slice(0, MAX_LAYER_HOTSPOTS);
+}
+
+/**
+ * P1-02 觉察引导问句模板库：默认版 / 柔和版双库，与图形形态绑定；
+ * 全部开放式、向内探索、不带价值判断；非强制、不给答案、不要求作答。
+ */
+export interface PromptPair {
+  default: string[]; // 默认版（页面展示其中 1 条，可确定性轮换）
+  soft: string[]; // 柔和版（柔和模式自动切换，固定 1 条，措辞更温和）
+}
+
+export const AWARENESS_PROMPTS: Record<EmotionCategory, PromptPair> = {
+  rumination: {
+    default: ['是什么想法，让你反复回到这里？', '这个想法是事实，还是脑海里的猜测？'],
+    soft: ['如果愿意想一想，是什么让你的思绪不断绕回来？'],
+  },
+  'diffuse-low': {
+    default: ['这种沉重感，更容易在身体的哪个位置被感受到？', '它是从什么时候开始弥漫的？'],
+    soft: ['这份闷闷的感受，有没有在身体上留下一点感觉？'],
+  },
+  conflict: {
+    default: ['这两种感受，哪一个更早出现？', '它们各自想保护你什么？'],
+    soft: ['这些交织在一起的感受，哪一个最先被你察觉到？'],
+  },
+  numbness: {
+    default: ['是什么让你想要关上感受，保护自己？', '封闭的外壳之下，还有什么在等待？'],
+    soft: ['这份封闭，是不是在帮你避开一些难以承受的感受？'],
+  },
+  excited: {
+    default: ['是什么让这份雀跃升起来的？', '这份心情，你最想和谁分享？'],
+    soft: ['这份轻松，是从什么时候开始的？'],
+  },
+  calm: {
+    default: ['是什么让你慢慢松下来？', '此刻的身体是什么感觉？'],
+    soft: ['此刻，是什么让你感受到这份安稳？'],
+  },
+};
+
+/** 复合图形专属问句（主形态反刍 + 云雾低落）；其余复合组合回落主形态问句库 */
+const COMPOUND_PROMPT: PromptPair = {
+  default: ['循环思虑和疲惫，哪一部分对你消耗更大？'],
+  soft: ['在反复思虑和闷闷的疲惫里，哪一部分你更容易觉察到？'],
+};
+
+/** 文案黑名单（强制校验）：指导、鸡汤、评判类话术禁止出现在任何问句模板中 */
+export const PROMPT_BANNED_PHRASES = [
+  '你应该',
+  '你要',
+  '你必须',
+  '试着去解决',
+  '想开一点',
+  '积极一点',
+  '早点走出来',
+  '别想太多',
+  '坚强点',
+  '加油',
+];
+
+export function containsBannedPhrasing(text: string): boolean {
+  return PROMPT_BANNED_PHRASES.some((p) => text.includes(p));
+}
+
+/**
+ * 取觉察问句。默认版返回问句列表（页面展示其中 1 条，可确定性轮换）；
+ * 柔和模式只返回 1 条柔和版（自动剔除刺激性措辞后固定 1 条）。
+ * 复合图形优先匹配专属库，否则回落主形态问句库。
+ * 内置黑名单过滤：任何命中禁用话术的模板都不会返回（防止模板库迭代引入说教文案）。
+ */
+export function awarenessPrompts(cat: string, soft = false, compound: string[] = []): string[] {
+  let pair: PromptPair | undefined;
+  if (cat === 'rumination' && compound.includes('diffuse-low')) {
+    pair = COMPOUND_PROMPT;
+  } else {
+    pair = (AWARENESS_PROMPTS as Record<string, PromptPair | undefined>)[cat];
+  }
+  const list = pair ? (soft ? pair.soft : pair.default) : ['此刻的你，注意到了什么？'];
+  return list.filter((q) => !containsBannedPhrasing(q));
 }
 
 /** 情绪流动注解（时序隐喻：情绪是动态过程，不是固定标签） */
@@ -551,7 +702,25 @@ export function buildRulesExport() {
     crisisRule: `输入命中高危信号词（${CRISIS_KEYWORDS.join('、')}等）直接阻断图形生成，微调面板与交互全部不触发，仅提供支持信息`,
     manualOverrideRule: '识别结果先预览、可手动微调（主情绪/强度/次要情绪开关）；手动修改后图形绑定用户参数并标记来源=人工调整',
     metadataTagsRule: '触发类型与躯体感受为可选附加元数据，不参与形态判定；躯体感受仅在解读文案中温和引用',
-    awarenessRule: '觉察引导问句与图形类型绑定，非说教、不给答案、不要求回答',
+    layerDocRule: {
+      scope: '仅复合形态图形支持分层点击（螺旋+云雾 / 团块+云雾 / 外圈螺旋+内核团块 / 尖角螺旋+薄雾 / 多层波纹）；单一基础形态无热区、悬浮无光晕、点击无响应',
+      hotspotCap: MAX_LAYER_HOTSPOTS,
+      hotspotVisual: '热区不默认显示边框高亮；悬浮/长按仅出现静态微弱低饱和光晕（不闪烁），柔和模式光晕进一步减弱',
+      bubbleRule: '点击热区弹出轻量气泡（结构名称+固定隐喻文案），点击空白或关闭按钮收起；切换热区自动关闭上一个；不自动弹出',
+      templates: LAYER_STRUCTURES,
+      versionBinding: '分层释义文案随图形记录做版本快照存储；旧历史记录沿用当时版本文案，不自动更新',
+      privacyRule: '仅记录用户是否点击过分层，不收集对释义的反馈、不做情绪判断',
+      switchable: '全局开关【图形分层释义功能】，关闭后悬浮、点击全部无响应',
+    },
+    awarenessRule: {
+      library: AWARENESS_PROMPTS,
+      compoundPrompt: '复合图形优先匹配专属/主形态问句库；问句实时按当前规则渲染，不存储用户反馈',
+      softMode: '柔和模式自动切换柔和版问句，数量缩减为固定 1 条，措辞更温和',
+      blacklist: PROMPT_BANNED_PHRASES,
+      blacklistRule: '文案黑名单强制校验：命中禁用话术的模板一律不返回',
+      principle: '非强制、默认收起、不给答案、无输入框、不要求作答、不说教不评判',
+      switchable: '全局开关【觉察引导问句】，关闭后页面不再出现入口按钮',
+    },
     interactionRule: '按住图形产生临时形变（呼吸调节体验），不修改记录的原始图形参数，松开恢复',
     transitionRule: '与上一条记录的对比只做中性形态描述，不做好坏评判',
     softModeDowngrade: '柔和模式：隐藏拉扯尖角形态（冲突降级为普通反刍螺旋）、形变幅度减半、动画锁定最慢档',

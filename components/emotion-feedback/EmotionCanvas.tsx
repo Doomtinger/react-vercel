@@ -8,15 +8,20 @@
  *   次要情绪含冲突拉扯时，其尖角特征保留；
  * - 柔和模式：抹除全部尖角、关闭全部抖动；
  * - 动画通过 requestAnimationFrame 直接修改 SVG 属性，避免每帧 React 重渲染；
- * - 单轮动画周期 3~6s（呼吸 5s / 波纹 3~6s / 云雾为连续缓慢下沉流）。
+ * - 单轮动画周期 3~6s（呼吸 5s / 波纹 3~6s / 云雾为连续缓慢下沉流）；
+ * - 呼吸交互：按住画布产生临时形变（自转减速/外扩/散开/膨起），仅作用于展示层，
+ *   不修改任何记录参数，松开后缓动恢复；柔和模式形变减半；
+ * - 速度档位：慢 0.5 / 标准 1 / 快 1.6，柔和模式锁定最慢；时钟按 dt 积分，变速不跳帧；
+ * - 分层点击：点击任一图层触发回调（螺旋类主层区分外圈 / 中心区域）。
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type MouseEvent } from 'react';
 import {
   CALM_ACCENT,
   EXCITED_ACCENT,
   INTENSITY_RULES,
   safeCategoryRule,
+  type ClickZone,
   type EmotionCategory,
   type IntensityLevel,
   type ShapeForm,
@@ -44,6 +49,12 @@ interface LayerSpec {
 interface Props {
   params: ShapeParams;
   softMode?: boolean;
+  /** 呼吸交互：按住画布时的临时形变（不修改任何记录参数，松开缓动恢复） */
+  held?: boolean;
+  /** 动画速度档位倍率：慢 0.5 / 标准 1 / 快 1.6（柔和模式锁定最慢） */
+  speed?: number;
+  /** 图形分层点击隐喻：cat 为被点击图层的情绪类别，zone 为点击区域 */
+  onLayerClick?: (cat: EmotionCategory, zone: ClickZone) => void;
 }
 
 function levelIdx(intensity: IntensityLevel): number {
@@ -211,14 +222,30 @@ function EmotionFormLayer({
   params,
   softMode,
   uid,
+  held = false,
+  speed = 1,
+  onLayerClick,
 }: {
   spec: LayerSpec;
   params: ShapeParams;
   softMode: boolean;
   uid: string;
+  held?: boolean;
+  speed?: number;
+  onLayerClick?: (spec: LayerSpec, e: MouseEvent<SVGGElement>) => void;
 }) {
   const groupRef = useRef<SVGGElement | null>(null);
   const nodeRefs = useRef<(SVGElement | null)[]>([]);
+  // 呼吸交互 / 速度档位走 ref 同步：切换时不重启动画时钟，不跳帧
+  const heldRef = useRef(0);
+  const speedRef = useRef(1);
+  const speedMul = softMode ? Math.min(speed, 0.5) : speed; // 柔和模式锁定最慢
+  useEffect(() => {
+    heldRef.current = held ? 1 : 0;
+  }, [held]);
+  useEffect(() => {
+    speedRef.current = speedMul;
+  }, [speedMul]);
 
   const level = INTENSITY_RULES[params.intensity];
   const li = levelIdx(params.intensity);
@@ -255,23 +282,40 @@ function EmotionFormLayer({
 
   useEffect(() => {
     let raf = 0;
-    const start = performance.now();
+    // dt 积分时钟：速度档位切换只改变步长，相位连续不跳帧
+    let last: number | null = null;
+    let clock = 0; // 常规动画时钟（受速度档位缩放）
+    let slowClock = 0; // 按住时放缓的时钟（波纹 / 上升光尘）
+    let rotClock = 0; // 按住时减速的自转时钟（螺旋类）
+    let hold = 0; // 呼吸交互形变量，向目标值缓动，松开归零恢复
     const phase0 = ((params.seed % 360) / 360) * Math.PI * 2;
     const seedFrac = (params.seed % 997) / 997;
     const bias = CLOUD_BIAS[li];
+    const holdScale = softMode ? 0.5 : 1; // 柔和模式形变减半
 
     const loop = (now: number) => {
-      const t = (now - start) / 1000;
+      const dt = last === null ? 0.016 : Math.min((now - last) / 1000, 0.1);
+      last = now;
+      const effSpeed = softMode ? Math.min(speedRef.current, 0.5) : speedRef.current;
+      const ease = 1 - Math.pow(0.92, dt * 60);
+      hold += (heldRef.current - hold) * ease;
+      const hAmt = hold * holdScale;
+      clock += dt * effSpeed;
+      slowClock += dt * effSpeed * (1 - hAmt * 0.6);
+      rotClock += dt * effSpeed * (1 - hAmt * 0.7);
+      const t = clock;
       const g = groupRef.current;
 
       if (spec.form === 'spiral' || spec.form === 'conflict-spiral') {
         if (g) {
-          // 呼吸周期 5s；收缩 + 缓慢自转
-          const breathe = 1 - level.contraction * (0.5 - 0.5 * Math.cos((t * 2 * Math.PI) / 5));
+          // 呼吸周期 5s；收缩 + 缓慢自转；按住时自转减速、整体轻微外扩（临时形变，不改参数）
+          const breathe =
+            (1 - level.contraction * (0.5 - 0.5 * Math.cos((t * 2 * Math.PI) / 5))) * (1 + hAmt * 0.08);
           const dir = spec.form === 'conflict-spiral' ? 1 : -1;
-          const jx = jitterAmp * Math.sin(t * 24 + phase0);
-          const jy = jitterAmp * Math.cos(t * 19 + phase0 * 1.3);
-          const rot = dir * rotSpeed * t;
+          const ja = jitterAmp * (1 - hAmt * 0.5);
+          const jx = ja * Math.sin(t * 24 + phase0);
+          const jy = ja * Math.cos(t * 19 + phase0 * 1.3);
+          const rot = dir * rotSpeed * rotClock;
           g.setAttribute(
             'transform',
             `translate(${jx.toFixed(2)} ${jy.toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${breathe.toFixed(4)})`
@@ -284,22 +328,24 @@ function EmotionFormLayer({
           const b = blobs[ni % blobs.length];
           const prog = ((t * b.speed) / cloudCycle + b.speed * 0.17 + ni * 0.11) % 1;
           const y = bias - 310 + prog * 580;
-          const x = b.x + 24 * Math.sin(t * 0.1 + ni * 1.7 + phase0);
+          const spread = (b.x >= 0 ? 1 : -1) * hAmt * 30; // 按住时向两侧轻微散开、透明度降低
+          const x = b.x + spread + 24 * Math.sin(t * 0.1 + ni * 1.7 + phase0);
           el.setAttribute('cy', y.toFixed(1));
           el.setAttribute('cx', x.toFixed(1));
+          el.setAttribute('opacity', (b.op * (1 - hAmt * 0.45)).toFixed(3));
         });
       } else if (spec.form === 'solid-block') {
         if (g) {
-          // 仅极微弱呼吸式缩放，强度越高越趋近静止
+          // 仅极微弱呼吸式缩放，强度越高越趋近静止；按住时轻微膨起
           const amp = BLOCK_BREATH[li];
-          const s = 1 + amp * (0.5 - 0.5 * Math.cos((t * 2 * Math.PI) / 6));
+          const s = (1 + amp * (0.5 - 0.5 * Math.cos((t * 2 * Math.PI) / 6))) * (1 + hAmt * 0.05);
           g.setAttribute('transform', `scale(${s.toFixed(4)})`);
         }
       } else if (spec.form === 'ripple') {
         const nodes = nodeRefs.current;
         nodes.forEach((el, ni) => {
           if (!(el instanceof SVGCircleElement)) return;
-          const p = ((t / ripplePeriod) + ni / rippleCount + seedFrac * 0.5) % 1;
+          const p = ((slowClock / ripplePeriod) + ni / rippleCount + seedFrac * 0.5) % 1;
           const r = 22 + p * 205;
           const op = Math.pow(1 - p, 1.4) * (level.strokeOpacity + 0.1);
           el.setAttribute('r', r.toFixed(1));
@@ -310,7 +356,7 @@ function EmotionFormLayer({
         const nodes = nodeRefs.current;
         nodes.forEach((el, ni) => {
           if (!(el instanceof SVGCircleElement)) return;
-          const p = ((t / ascendingPeriod) + ni / ascendingCount + seedFrac * 0.4) % 1;
+          const p = ((slowClock / ascendingPeriod) + ni / ascendingCount + seedFrac * 0.4) % 1;
           const y = 210 - p * 420;
           const xBase = ((ni * 53) % 180) - 90;
           const x = xBase + 18 * Math.sin(t * 0.5 + ni * 1.3 + phase0);
@@ -338,7 +384,12 @@ function EmotionFormLayer({
   const isConflictPrimary = spec.form === 'conflict-spiral' && spec.role === 'primary';
 
   return (
-    <g transform={`scale(${spec.scale})`} opacity={spec.layerOpacity}>
+    <g
+      transform={`scale(${spec.scale})`}
+      opacity={spec.layerOpacity}
+      className="cursor-pointer"
+      onClick={(e) => onLayerClick?.(spec, e)}
+    >
       <g ref={groupRef}>
         {/* 云雾形态：柔和无棱角流体面片，边缘消融 */}
         {spec.form === 'cloud' &&
@@ -436,12 +487,33 @@ function EmotionFormLayer({
   );
 }
 
-export default function EmotionCanvas({ params, softMode = false }: Props) {
+export default function EmotionCanvas({ params, softMode = false, held = false, speed = 1, onLayerClick }: Props) {
   const layers = useMemo(() => buildLayers(params), [params]);
   const uid = `ef${params.seed % 100000}`;
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  /** 图层点击 → 换算 viewBox 坐标判定区域：螺旋类主层分外圈/中心，其余整层 */
+  const handleLayerClick = (spec: LayerSpec, e: MouseEvent<SVGGElement>) => {
+    if (!onLayerClick) return;
+    e.stopPropagation();
+    let zone: ClickZone = 'layer';
+    if (spec.role === 'primary' && (spec.form === 'spiral' || spec.form === 'conflict-spiral') && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const vx = ((e.clientX - rect.left) / rect.width) * (HALF * 2) - HALF;
+        const vy = ((e.clientY - rect.top) / rect.height) * (HALF * 2) - HALF;
+        zone = Math.hypot(vx, vy) > 72 ? 'outer' : 'center';
+      }
+    }
+    onLayerClick(spec.cat, zone);
+  };
 
   return (
-    <svg viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`} className="w-full h-full block">
+    <svg
+      ref={svgRef}
+      viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`}
+      className="w-full h-full block"
+    >
       <defs>
         {/* 统一低饱和中性底色，仅中心留极微弱主色晕染，不抢图形 */}
         <radialGradient id={`${uid}bg`} cx="50%" cy="44%" r="72%">
@@ -465,6 +537,9 @@ export default function EmotionCanvas({ params, softMode = false }: Props) {
           params={params}
           softMode={softMode}
           uid={`${uid}l${i}`}
+          held={held}
+          speed={speed}
+          onLayerClick={handleLayerClick}
         />
       ))}
     </svg>

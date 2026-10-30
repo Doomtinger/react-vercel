@@ -4,11 +4,16 @@
  * 情绪反馈 · MUST-03 标准化「情绪→图形→色彩→动态」映射
  *
  * - 相同文本多次生成，图形形态、色彩、动画完全一致（确定性映射）；
- * - 历史记录存储完整渲染参数与规则版本，规则迭代不回溯重绘（静默刷新）；
- * - 「规则说明」入口可查看映射表，并导出映射配置文档。
+ * - 识别结果先预览，可手动微调主情绪/强度/次要情绪后再生成（人工调整标记 source=manual）；
+ * - 高危拦截：文本含危机信号时阻断生成，直接展示心理援助热线；
+ * - 呼吸交互：按住图形临时形变，不修改记录参数，松开恢复；动画速度档位，柔和模式锁定最慢；
+ * - 触发/躯体标签仅作元数据；与上一条的变化提示只做中性描述，不评判好坏；
+ * - 历史记录存储完整渲染参数与规则版本，规则迭代不回溯重绘（静默刷新）。
+ *
+ * 合规红线：不诊断、不做医疗判定、不做测谎、不做健康评分；觉察问句只提问不给答案。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import EmotionCanvas, { isFormRenderable } from '@/components/emotion-feedback/EmotionCanvas';
 import {
   RULES_VERSION,
@@ -20,6 +25,14 @@ import {
   safeCategoryLabel,
   CATEGORY_RULES,
   INTENSITY_RULES,
+  containsCrisisSignal,
+  appendBodyNote,
+  layerMetaphor,
+  awarenessPrompts,
+  flowNote,
+  buildTransitionHint,
+  TRIGGER_TAGS,
+  BODY_TAGS,
   type EmotionSignal,
   type ShapeParams,
   type EmotionCategory,
@@ -34,9 +47,31 @@ interface HistoryRecord {
   interpretation: string;
   version: string;
   createdAt: number;
+  source: 'auto' | 'manual'; // 人工微调过的参数标记为 manual
+  triggerTags: string[]; // 触发类型标签（仅元数据，不参与形态判定）
+  bodyTags: string[]; // 躯体感受标签（仅元数据，解读中温和引用）
+  transitionHint?: string; // 与上一条记录的中性变化提示
 }
 
 const STORAGE_KEY = 'emotion-feedback-history-v1';
+const INTENSITY_ORDER: IntensityLevel[] = ['light', 'medium', 'heavy'];
+
+/** 历史记录兼容：旧版本记录缺少 v1.4 字段时补默认值，不崩溃、不重绘 */
+function normalizeRecord(r: HistoryRecord): HistoryRecord {
+  return {
+    ...r,
+    source: r.source === 'manual' ? 'manual' : 'auto',
+    triggerTags: Array.isArray(r.triggerTags) ? r.triggerTags : [],
+    bodyTags: Array.isArray(r.bodyTags) ? r.bodyTags : [],
+    transitionHint: typeof r.transitionHint === 'string' ? r.transitionHint : undefined,
+  };
+}
+
+const SPEED_STEPS: { label: string; value: number }[] = [
+  { label: '慢', value: 0.5 },
+  { label: '标准', value: 1 },
+  { label: '快', value: 1.6 },
+];
 
 const presetExamples = [
   {
@@ -79,6 +114,11 @@ const INTENSITY_COLOR: Record<IntensityLevel, string> = {
   heavy: 'text-rose-400',
 };
 
+/** 标签开关 */
+function toggleIn<T>(list: T[], tag: T): T[] {
+  return list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag];
+}
+
 export default function EmotionFeedbackPage() {
   const [inputText, setInputText] = useState('');
   const [current, setCurrent] = useState<HistoryRecord | null>(null);
@@ -87,6 +127,25 @@ export default function EmotionFeedbackPage() {
   const [showRules, setShowRules] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  // P0 识别预览 + 手动微调
+  const [preview, setPreview] = useState<{ text: string; signal: EmotionSignal } | null>(null);
+  const [adjPrimary, setAdjPrimary] = useState<EmotionCategory>('calm');
+  const [adjIntensity, setAdjIntensity] = useState<IntensityLevel>('medium');
+  const [adjCompound, setAdjCompound] = useState<EmotionCategory[]>([]);
+
+  // P2 元数据标签
+  const [selTriggers, setSelTriggers] = useState<string[]>([]);
+  const [selBodies, setSelBodies] = useState<string[]>([]);
+
+  // P1 交互
+  const [crisis, setCrisis] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [speed, setSpeed] = useState(1); // 0.5 慢 / 1 标准 / 1.6 快
+  const [layerInfo, setLayerInfo] = useState<string | null>(null);
+  const [showPrompts, setShowPrompts] = useState(false);
+
+  const effSpeed = softMode ? 0.5 : speed; // 柔和模式锁定最慢
+
   // 历史记录持久化（渲染只依赖存储的 params，规则迭代不影响旧图）
   useEffect(() => {
     try {
@@ -94,8 +153,9 @@ export default function EmotionFeedbackPage() {
       if (raw) {
         const parsed = JSON.parse(raw) as HistoryRecord[];
         if (Array.isArray(parsed)) {
-          setHistory(parsed);
-          if (parsed.length > 0) setCurrent(parsed[0]);
+          const records = parsed.filter((r) => r && r.params && r.signal).map(normalizeRecord);
+          setHistory(records);
+          if (records.length > 0) setCurrent(records[0]);
         }
       }
     } catch {
@@ -113,23 +173,93 @@ export default function EmotionFeedbackPage() {
     }
   }, [history, hydrated]);
 
-  const handleAnalyze = () => {
+  /** 识别（P0 第一步）：高危拦截优先级最高，阻断生成、不写入历史 */
+  const handleRecognize = () => {
     const text = inputText.trim();
     if (!text) return;
-
+    if (containsCrisisSignal(text)) {
+      setCrisis(true);
+      setPreview(null);
+      return;
+    }
+    setCrisis(false);
     const signal = analyzeEmotion(text);
+    setAdjPrimary(signal.primary);
+    setAdjIntensity(signal.intensity);
+    setAdjCompound(signal.compound);
+    setPreview({ text, signal });
+  };
+
+  /** 微调后的信号（柔和模式全局降级：拉扯尖角 → 反刍螺旋） */
+  const adjustedSignal = useMemo<EmotionSignal | null>(() => {
+    if (!preview) return null;
+    const primary = softMode && adjPrimary === 'conflict' ? 'rumination' : adjPrimary;
+    const compound = adjCompound.filter((c) => c !== primary);
+    const reshaped =
+      primary !== preview.signal.primary ||
+      compound.length !== preview.signal.compound.length ||
+      compound.some((c, i) => preview.signal.compound[i] !== c);
+    return {
+      ...preview.signal,
+      primary,
+      compound,
+      intensity: adjIntensity,
+      // 只有主/次情绪被调整时才重算反刍标记；仅调强度时保留自动识别值
+      isRumination: reshaped
+        ? primary === 'rumination' || compound.includes('rumination')
+        : preview.signal.isRumination,
+    };
+  }, [preview, adjPrimary, adjIntensity, adjCompound, softMode]);
+
+  const previewParams = useMemo<ShapeParams | null>(
+    () => (adjustedSignal ? mapToShapeParams(adjustedSignal) : null),
+    [adjustedSignal]
+  );
+  const previewInterpretation = useMemo(
+    () => (adjustedSignal ? buildInterpretation(adjustedSignal) : ''),
+    [adjustedSignal]
+  );
+  /** 微调参数与自动识别不一致 → 人工调整记录 */
+  const isManual = useMemo(() => {
+    if (!preview || !adjustedSignal) return false;
+    return (
+      adjustedSignal.primary !== preview.signal.primary ||
+      adjustedSignal.intensity !== preview.signal.intensity ||
+      adjustedSignal.compound.length !== preview.signal.compound.length ||
+      adjustedSignal.compound.some((c, i) => preview.signal.compound[i] !== c)
+    );
+  }, [preview, adjustedSignal]);
+
+  const commitRecord = (text: string, signal: EmotionSignal, source: 'auto' | 'manual') => {
     const params = mapToShapeParams(signal);
+    let interpretation = buildInterpretation(signal);
+    if (selBodies.length > 0) {
+      interpretation = appendBodyNote(interpretation, selBodies); // 躯体感受温和引用
+    }
+    const prev = history[0];
+    const transitionHint = prev
+      ? buildTransitionHint(
+          { primary: prev.params.primary, intensity: prev.params.intensity },
+          { primary: params.primary, intensity: params.intensity }
+        )
+      : undefined;
     const record: HistoryRecord = {
       id: `${Date.now()}`,
       text,
       signal,
       params,
-      interpretation: buildInterpretation(signal),
+      interpretation,
       version: RULES_VERSION,
       createdAt: Date.now(),
+      source,
+      triggerTags: selTriggers,
+      bodyTags: selBodies,
+      transitionHint,
     };
-    setHistory((prev) => [record, ...prev].slice(0, 20));
+    setHistory((p) => [record, ...p].slice(0, 20));
     setCurrent(record);
+    setPreview(null);
+    setLayerInfo(null);
   };
 
   const handlePresetSelect = (text: string) => {
@@ -147,6 +277,8 @@ export default function EmotionFeedbackPage() {
     URL.revokeObjectURL(url);
   };
 
+  const selectValue = softMode && adjPrimary === 'conflict' ? 'rumination' : adjPrimary;
+
   return (
     <div className="h-screen flex bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900">
       {/* 左侧控制面板 */}
@@ -158,6 +290,7 @@ export default function EmotionFeedbackPage() {
           </h1>
           <p className="text-xs text-gray-400 leading-relaxed">
             描述你的感受，系统按固定映射规则生成稳定的图形、色彩与动画——同样的感受，呈现同样的图形。
+            识别结果可以先预览、手动修正，再生成。
           </p>
         </div>
 
@@ -173,13 +306,207 @@ export default function EmotionFeedbackPage() {
         />
         <div className="text-xs text-gray-500 mt-1 mb-3">{inputText.length} 字符</div>
 
+        {/* P2 触发类型标签（仅元数据） */}
+        <div className="mb-3">
+          <div className="text-xs text-gray-400 mb-1.5">🏷️ 触发类型（可选标签 · 不影响图形）</div>
+          <div className="flex flex-wrap gap-1.5">
+            {TRIGGER_TAGS.map((t) => {
+              const on = selTriggers.includes(t);
+              return (
+                <button
+                  key={t}
+                  onClick={() => setSelTriggers(toggleIn(selTriggers, t))}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    on
+                      ? 'bg-sky-500/20 border-sky-400/40 text-sky-300'
+                      : 'bg-white/5 border-white/15 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* P2 躯体感受标签 */}
+        <div className="mb-4">
+          <div className="text-xs text-gray-400 mb-1.5">🫀 躯体感受（勾选后在解读中温和提及）</div>
+          <div className="flex flex-wrap gap-1.5">
+            {BODY_TAGS.map((t) => {
+              const on = selBodies.includes(t);
+              return (
+                <button
+                  key={t}
+                  onClick={() => setSelBodies(toggleIn(selBodies, t))}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    on
+                      ? 'bg-rose-400/15 border-rose-300/40 text-rose-300'
+                      : 'bg-white/5 border-white/15 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <button
-          onClick={handleAnalyze}
+          onClick={handleRecognize}
           disabled={!inputText.trim()}
           className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
         >
-          <span>✨</span> 生成情绪图形
+          <span>🔍</span> 识别情绪
         </button>
+
+        {/* 高危拦截：不生成图形、不写入记录 */}
+        {crisis && (
+          <div className="mt-4 p-4 rounded-xl border border-rose-400/40 bg-rose-500/10">
+            <h3 className="text-sm font-semibold text-rose-200 mb-2">🫂 先停一停，图形不重要</h3>
+            <p className="text-xs text-rose-100/80 leading-relaxed mb-3">
+              你刚才的描述里，可能有处在危机中的信号。这一页已经暂停生成，也不会把这段话存进历史记录。
+              你不需要马上做任何分析，先照顾自己。
+            </p>
+            <p className="text-xs text-white font-semibold">
+              全国心理援助热线：<span className="font-mono text-base">12356</span>（24 小时）
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              如果此刻有紧急危险，请直接拨打 120 或 110。
+            </p>
+            <button
+              onClick={() => setCrisis(false)}
+              className="mt-3 text-xs text-rose-300 hover:text-rose-200 underline underline-offset-2"
+            >
+              返回编辑
+            </button>
+          </div>
+        )}
+
+        {/* P0 识别结果预览 + 手动微调面板 */}
+        {preview && adjustedSignal && previewParams && (
+          <div className="mt-4 p-4 rounded-xl border border-indigo-400/30 bg-indigo-500/10">
+            <h3 className="text-sm font-semibold text-white mb-2">🔍 识别结果预览</h3>
+            <p className="text-xs text-gray-300 leading-relaxed mb-3">
+              识别到：主情绪【{safeCategoryLabel(adjustedSignal.primary)}】｜强度【
+              {INTENSITY_RULES[adjustedSignal.intensity].label}】
+              {adjustedSignal.compound.length > 0 && (
+                <>
+                  ｜次要情绪【{adjustedSignal.compound.map((c) => safeCategoryLabel(c)).join('、')}】
+                </>
+              )}
+            </p>
+
+            <div className="flex gap-3">
+              {/* 实时预览小图 */}
+              <div
+                className="w-24 h-24 rounded-lg overflow-hidden shrink-0 border border-white/10"
+                style={{ backgroundColor: previewParams.bgTint }}
+              >
+                <EmotionCanvas params={previewParams} softMode={softMode} />
+              </div>
+
+              <div className="flex-1 space-y-2.5">
+                {/* 主情绪下拉 */}
+                <label className="block">
+                  <span className="text-[10px] text-gray-400 block mb-1">主情绪</span>
+                  <select
+                    value={selectValue}
+                    onChange={(e) => setAdjPrimary(e.target.value as EmotionCategory)}
+                    className="w-full px-2 py-1.5 rounded-lg bg-slate-800 border border-white/15 text-white text-xs focus:outline-none focus:border-indigo-400"
+                  >
+                    {(Object.keys(CATEGORY_RULES) as EmotionCategory[]).map((cat) => (
+                      <option key={cat} value={cat} disabled={softMode && cat === 'conflict'}>
+                        {safeCategoryLabel(cat)}
+                        {softMode && cat === 'conflict' ? '（柔和模式下已降级）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 强度滑条 Ⅰ/Ⅱ/Ⅲ */}
+                <label className="block">
+                  <span className="text-[10px] text-gray-400 block mb-1">
+                    强度{' '}
+                    <span className={INTENSITY_COLOR[adjustedSignal.intensity]}>
+                      {INTENSITY_RULES[adjustedSignal.intensity].label}
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={2}
+                    step={1}
+                    value={INTENSITY_ORDER.indexOf(adjustedSignal.intensity)}
+                    onChange={(e) => setAdjIntensity(INTENSITY_ORDER[Number(e.target.value)])}
+                    className="w-full accent-indigo-400"
+                  />
+                </label>
+
+                {/* 次要情绪开关 */}
+                {preview.signal.compound.length > 0 && (
+                  <div>
+                    <span className="text-[10px] text-gray-400 block mb-1">次要情绪</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {preview.signal.compound.map((c) => {
+                        const on = adjustedSignal.compound.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            onClick={() => setAdjCompound(toggleIn(adjCompound, c))}
+                            className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                              on
+                                ? 'bg-purple-500/20 border-purple-400/40 text-purple-200'
+                                : 'bg-white/5 border-white/15 text-gray-500 line-through'
+                            }`}
+                          >
+                            {safeCategoryLabel(c)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {softMode && adjPrimary === 'conflict' && (
+              <p className="mt-2 text-[10px] text-amber-300/80">
+                柔和模式：拉扯尖角已降级为反刍螺旋（无尖角）。
+              </p>
+            )}
+            {isManual && (
+              <p className="mt-2 text-[10px] text-amber-300/80">
+                已手动调整——这条记录将标记为「人工」，与自动识别区分。
+              </p>
+            )}
+            <p className="mt-2 text-[10px] text-gray-500">
+              识别基于固定关键词规则，不是心理评估；一切都可以手动修正。
+              {previewInterpretation ? '' : ''}
+            </p>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <button
+                onClick={() => commitRecord(preview.text, adjustedSignal, isManual ? 'manual' : 'auto')}
+                className="py-2 rounded-lg bg-indigo-500/80 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+              >
+                ✔️ 确认生成
+              </button>
+              <button
+                onClick={() => commitRecord(preview.text, preview.signal, 'auto')}
+                className="py-2 rounded-lg bg-white/10 hover:bg-white/15 text-gray-200 text-xs transition-colors"
+              >
+                直接生成，不调整
+              </button>
+              <button
+                onClick={() => setPreview(null)}
+                className="py-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-xs transition-colors"
+              >
+                ← 返回编辑
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 柔和模式 + 规则说明入口 */}
         <div className="mt-4 flex items-center justify-between">
@@ -201,10 +528,21 @@ export default function EmotionFeedbackPage() {
           </button>
         </div>
 
-        {/* 当前分析结果 */}
+        {/* 当前记录的结构化参数 */}
         {current && (
           <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-            <h3 className="text-sm font-semibold text-white mb-3">📐 结构化参数</h3>
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              📐 结构化参数
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  current.source === 'manual'
+                    ? 'bg-amber-500/20 text-amber-300'
+                    : 'bg-white/10 text-gray-500'
+                }`}
+              >
+                {current.source === 'manual' ? '人工调整' : '自动识别'}
+              </span>
+            </h3>
             <div className="grid grid-cols-2 gap-y-2 gap-x-3 text-xs">
               <div className="text-gray-500">情绪大类</div>
               <div className="text-gray-200 flex items-center gap-1.5">
@@ -285,7 +623,10 @@ export default function EmotionFeedbackPage() {
               {history.map((rec) => (
                 <button
                   key={rec.id}
-                  onClick={() => setCurrent(rec)}
+                  onClick={() => {
+                    setCurrent(rec);
+                    setLayerInfo(null);
+                  }}
                   className={`w-full text-left p-3 rounded-lg border transition-colors ${
                     current?.id === rec.id
                       ? 'bg-indigo-500/15 border-indigo-400/40'
@@ -303,9 +644,34 @@ export default function EmotionFeedbackPage() {
                         {INTENSITY_RULES[rec.params.intensity].label}
                       </span>
                     </span>
-                    <span className="ml-auto text-[10px] font-mono text-gray-500">{rec.version}</span>
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          rec.source === 'manual'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-white/10 text-gray-500'
+                        }`}
+                      >
+                        {rec.source === 'manual' ? '人工' : '自动'}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-500">{rec.version}</span>
+                    </span>
                   </div>
                   <p className="text-xs text-gray-400 line-clamp-2">{rec.text}</p>
+                  {(rec.triggerTags.length > 0 || rec.bodyTags.length > 0) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {rec.triggerTags.map((t) => (
+                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300/80">
+                          🏷️ {t}
+                        </span>
+                      ))}
+                      {rec.bodyTags.map((t) => (
+                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-rose-400/10 text-rose-300/80">
+                          🫀 {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -330,19 +696,63 @@ export default function EmotionFeedbackPage() {
         </div>
       </aside>
 
-      {/* 右侧图形展示区：居中 · 无边框 · 低饱和底色 */}
-      <main className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
+      {/* 右侧图形展示区：居中 · 无边框 · 低饱和底色
+          滚动在外层、居中在内层 min-h-full 容器：内容超高时可完整滚动，
+          避免 flex justify-center 溢出裁掉顶部内容 */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="min-h-full flex flex-col items-center justify-center p-8">
         {current ? (
           <>
-            <div className="w-full max-w-[560px] relative">
-              <div className="absolute -top-8 right-0 text-xs font-mono text-gray-500">
-                映射规则 {current.version}
+            {/* P1 速度档位 + 呼吸交互提示 */}
+            <div className="w-full max-w-[560px] mb-3 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">动画速度</span>
+                <div className="flex rounded-lg overflow-hidden border border-white/10">
+                  {SPEED_STEPS.map((s) => (
+                    <button
+                      key={s.label}
+                      disabled={softMode}
+                      onClick={() => setSpeed(s.value)}
+                      className={`px-3 py-1 text-xs transition-colors ${
+                        softMode
+                          ? 'cursor-not-allowed text-gray-600'
+                          : speed === s.value
+                            ? 'bg-indigo-500/30 text-white'
+                            : 'bg-white/5 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                {softMode && <span className="text-[10px] text-emerald-300/80">柔和模式 · 锁定最慢</span>}
               </div>
+              <span className="text-[10px] text-gray-500">按住图形 · 临时形变 · 松开恢复 · 不保存</span>
+            </div>
+
+            <div className="w-full max-w-[560px]">
               <div
-                className="aspect-square w-full rounded-2xl overflow-hidden"
-                style={{ backgroundColor: current.params.bgTint }}
+                className="aspect-square w-full rounded-2xl overflow-hidden select-none"
+                style={{ backgroundColor: current.params.bgTint, touchAction: 'none' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setHeld(true);
+                }}
+                onPointerUp={() => setHeld(false)}
+                onPointerLeave={() => setHeld(false)}
+                onPointerCancel={() => setHeld(false)}
               >
-                <EmotionCanvas params={current.params} softMode={softMode} />
+                <EmotionCanvas
+                  params={current.params}
+                  softMode={softMode}
+                  held={held}
+                  speed={effSpeed}
+                  onLayerClick={(cat, zone) => setLayerInfo(layerMetaphor(cat, zone))}
+                />
+              </div>
+              {/* 版本号走常规流放在画布下方右对齐，不再负偏移压住上方提示文字 */}
+              <div className="mt-2 text-right text-xs font-mono text-gray-500">
+                映射规则 {current.version}
               </div>
             </div>
 
@@ -353,14 +763,89 @@ export default function EmotionFeedbackPage() {
               </p>
             )}
 
-            {/* 隐喻解读（与映射规则绑定） */}
-            <div className="w-full max-w-[560px] mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
+            {/* P1 分层点击隐喻 */}
+            {layerInfo && (
+              <div className="w-full max-w-[560px] mt-3 p-3 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-start gap-2">
+                <span className="text-sm">🫧</span>
+                <p className="text-xs text-purple-200/90 leading-relaxed flex-1">{layerInfo}</p>
+                <button
+                  onClick={() => setLayerInfo(null)}
+                  className="text-purple-300/60 hover:text-purple-200 text-sm leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* 隐喻解读（与映射规则绑定）+ 情绪流动注解 */}
+            <div className="w-full max-w-[560px] mt-4 p-4 rounded-xl bg-white/5 border border-white/10">
               <h3 className="text-sm font-semibold text-white mb-1.5">🔍 图形解读</h3>
               <p className="text-xs text-gray-300 leading-relaxed">{current.interpretation}</p>
+              <p className="text-[11px] text-slate-400/80 mt-2.5 leading-relaxed">
+                🌊 {flowNote(current.params.primary)}——情绪是流动的过程，不是固定标签。
+              </p>
+            </div>
+
+            {/* P2 与上一条记录的中性变化提示（只做形态对比，不评判好坏） */}
+            {current.transitionHint && (
+              <div className="w-full max-w-[560px] mt-3">
+                <span className="px-3 py-1 rounded-full text-xs bg-white/5 border border-white/10 text-gray-300 inline-flex items-center gap-1.5">
+                  ↔ 与上一条：{current.transitionHint}
+                  <span className="text-gray-500">（中性描述 · 无好坏评判）</span>
+                </span>
+              </div>
+            )}
+
+            {/* P2 元数据标签回显 */}
+            {(current.triggerTags.length > 0 || current.bodyTags.length > 0) && (
+              <div className="w-full max-w-[560px] mt-3 flex flex-wrap gap-2">
+                {current.triggerTags.map((t) => (
+                  <span
+                    key={t}
+                    className="px-3 py-1 rounded-full text-xs bg-sky-500/10 border border-sky-400/20 text-sky-300"
+                  >
+                    🏷️ 触发：{t}
+                  </span>
+                ))}
+                {current.bodyTags.map((t) => (
+                  <span
+                    key={t}
+                    className="px-3 py-1 rounded-full text-xs bg-rose-400/10 border border-rose-300/20 text-rose-300"
+                  >
+                    🫀 躯体：{t}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* P1 觉察引导问句（可选 · 只提问不给答案 · 不做引导纠正） */}
+            <div className="w-full max-w-[560px] mt-3 rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+              <button
+                onClick={() => setShowPrompts((v) => !v)}
+                className="w-full px-4 py-2.5 text-left text-xs text-gray-300 hover:text-white flex items-center justify-between transition-colors"
+              >
+                <span>💭 觉察问句（可选 · 不需要回答）</span>
+                <span className="text-gray-500">{showPrompts ? '收起' : '展开'}</span>
+              </button>
+              {showPrompts && (
+                <div className="px-4 pb-3.5">
+                  <ul className="space-y-1.5">
+                    {awarenessPrompts(current.params.primary).map((q) => (
+                      <li key={q} className="text-xs text-gray-400 leading-relaxed flex gap-1.5">
+                        <span className="text-gray-600">·</span>
+                        {q}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[10px] text-gray-600 mt-2">
+                    这些问句只是陪你停一停——没有标准答案，也不会被保存或分析。
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 结构摘要 chips */}
-            <div className="w-full max-w-[560px] mt-3 flex flex-wrap gap-2">
+            <div className="w-full max-w-[560px] mt-3 mb-2 flex flex-wrap gap-2">
               <span className="px-3 py-1 rounded-full text-xs bg-white/5 border border-white/10 text-gray-300">
                 形态：{safeCategoryRule(current.params.primary)?.formLabel ?? '历史形态'}
               </span>
@@ -388,12 +873,13 @@ export default function EmotionFeedbackPage() {
             <div className="text-7xl mb-6 animate-pulse">🌫️</div>
             <h2 className="text-2xl font-bold text-white mb-3">情绪反馈</h2>
             <p className="text-gray-400 text-sm max-w-md mx-auto leading-relaxed">
-              在左侧写下你的感受，系统将按版本化映射规则，生成稳定的图形、色彩与动画。
+              在左侧写下你的感受，系统先识别、你确认或微调，再按版本化映射规则生成稳定的图形、色彩与动画。
               <br />
               同样的感受，同样的图形——不会随机乱出图。
             </p>
           </div>
         )}
+        </div>
       </main>
 
       {/* 规则说明弹窗 */}
@@ -419,7 +905,7 @@ export default function EmotionFeedbackPage() {
             <p className="text-xs text-gray-400 leading-relaxed mb-5">
               情绪图形由参数驱动渲染，不使用随机生成。文本先经过确定性规则提取为结构化参数
               （情绪大类、强度、是否反刍、复合情绪），再查固定映射表得到形态、色彩与动画。
-              同样的输入永远得到同样的图形。
+              同样的输入永远得到同样的图形。本页不诊断、不做医疗判定、不做测谎、不做健康评分。
             </p>
 
             {/* 基础形态：4 大类 + 平静兜底态 */}
@@ -471,7 +957,7 @@ export default function EmotionFeedbackPage() {
 
             {/* 复合情绪融合与版本化 */}
             <h3 className="text-sm font-semibold text-white mb-2">复合情绪融合与统一约束</h3>
-            <ul className="text-xs text-gray-400 space-y-1.5 mb-5 list-disc list-inside">
+            <ul className="text-xs text-gray-400 space-y-1.5 mb-4 list-disc list-inside">
               <li>多种情绪并存：主情绪作为主体几何体，次要情绪作为包裹流体/附属图层融合穿插，不再输出单一形态；</li>
               <li>高频组合：反刍+低落＝螺旋外围包裹下沉云雾；麻木+低落＝团块底部缠绕稀薄云雾；反刍+麻木＝外圈螺旋、内核固化团块；</li>
               <li>有冲突（尖角）时优先保留尖角特征；</li>
@@ -479,6 +965,20 @@ export default function EmotionFeedbackPage() {
               <li>统一低饱和中性底色：暗色 #181922 / 亮色 #f6f7fa，不抢图形；单轮动画周期 3~6s，拒绝快节奏与频闪；</li>
               <li>每条图形记录绑定映射规则版本号；规则迭代后，历史记录保留生成当时的图形，不自动重绘；</li>
               <li>渲染为 SVG 矢量参数驱动，保证清晰度，禁止 AI 绘画随机生成。</li>
+            </ul>
+
+            {/* v1.4 交互与边界规则 */}
+            <h3 className="text-sm font-semibold text-white mb-2">交互规则与边界（v1.4）</h3>
+            <ul className="text-xs text-gray-400 space-y-1.5 mb-5 list-disc list-inside">
+              <li>高危拦截：文本包含危机信号时，不生成图形、不写入记录，直接展示心理援助热线（优先级最高）；</li>
+              <li>识别预览与手动微调：生成前展示「主情绪 / 强度 / 次要情绪」，可手动修正后生成；调整过的记录标记为「人工」；</li>
+              <li>柔和模式全局降级：柔和模式下冲突拉扯（尖角）选项不可选，降级为反刍螺旋；</li>
+              <li>呼吸交互：按住图形产生临时形变（螺旋减速外扩、云雾散开、团块膨起、波纹放缓），仅作用于展示层，不修改任何记录参数，松开缓动恢复，柔和模式形变减半；</li>
+              <li>动画速度档位：慢 / 标准 / 快，柔和模式锁定最慢；变速不跳帧；</li>
+              <li>分层点击隐喻：点击图形任一图层可查看该层含义，螺旋类主层区分外圈与中心；</li>
+              <li>觉察问句：只提问、不给答案，不引导、不纠正，回答与否完全自愿，不会被保存或分析；</li>
+              <li>触发类型 / 躯体感受标签仅作为元数据记录，不影响图形渲染；躯体感受只在解读中温和引用，不做推断；</li>
+              <li>与上一条记录的变化提示只做中性形态对比，不评判好坏，不做情绪评分或预测。</li>
             </ul>
 
             <div className="flex items-center justify-between pt-4 border-t border-white/10">

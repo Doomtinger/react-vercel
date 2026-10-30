@@ -25,8 +25,10 @@
  * 映射规则版本：每次调整下方任何映射表都必须递增
  * v1.3.0 新增「兴奋激昂 · 上升光尘」扩展态；痛苦/难受归入弥散低落；
  *        开心/快乐/幸福等高唤起正面词自平静移入兴奋激昂
+ * v1.4.0 增值能力：高危拦截、可选元数据标签（触发类型/躯体感受）、分层隐喻、
+ *        觉察引导问句、情绪流动注解、中性变化提示、手动微调来源标记
  */
-export const RULES_VERSION = 'v1.3.0';
+export const RULES_VERSION = 'v1.4.0';
 
 export type EmotionCategory = 'diffuse-low' | 'rumination' | 'conflict' | 'numbness' | 'excited' | 'calm';
 export type IntensityLevel = 'light' | 'medium' | 'heavy';
@@ -353,6 +355,156 @@ export function categoryLabel(cat: EmotionCategory): string {
   return CATEGORY_RULES[cat].label;
 }
 
+/* ============================================================
+ * v1.4 增值能力（不改变基础映射；守住合规红线：不诊断、不做医疗判定、不做测谎）
+ * ============================================================ */
+
+/** 高危信号词：命中即阻断图形生成，仅提供支持信息（优先级最高） */
+export const CRISIS_KEYWORDS = ['自杀', '轻生', '不想活', '活不下去', '自残', '伤害自己', '结束生命', '了结自己', '割腕', '跳楼', '遗书'];
+
+export function containsCrisisSignal(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return CRISIS_KEYWORDS.some((k) => t.includes(k));
+}
+
+/** 快捷情绪锚点（可选附加标签，仅元数据，不参与形态判定，供后续复盘统计） */
+export const TRIGGER_TAGS = ['人际矛盾', '工作压力', '自我苛责', '无来由低落', '创伤回想', '释怀放松'] as const;
+
+/** 躯体感受附加标记（可选元数据；解读文案温和引用，不与图形渲染强绑定） */
+export const BODY_TAGS = ['胸口发闷', '心慌', '疲惫', '紧绷', '窒息感'] as const;
+
+const BODY_NOTE_PHRASE: Record<string, string> = {
+  胸口发闷: '同时你感受到胸口发闷',
+  心慌: '同时你感受到一阵心慌',
+  疲惫: '同时身体传来疲惫的信号',
+  紧绷: '同时你感受到身体的紧绷',
+  窒息感: '同时你感受到一丝窒息感',
+};
+
+/** 解读文案温和引用躯体感受（仅当用户勾选） */
+export function appendBodyNote(interpretation: string, bodyTags: string[]): string {
+  const notes = bodyTags.map((t) => BODY_NOTE_PHRASE[t]).filter(Boolean);
+  if (notes.length === 0) return interpretation;
+  return `${interpretation} ${notes.join('，')}。`;
+}
+
+/** 分层隐喻：点击图形对应区域弹出该层含义（复合图形可分层拆解） */
+export type ClickZone = 'layer' | 'outer' | 'center';
+
+const LAYER_METAPHOR: Record<EmotionCategory, { layer: string; outer?: string; center?: string }> = {
+  'diffuse-low': { layer: '向外漫开的雾：没有明确形状的沉重，在持续弥漫' },
+  rumination: {
+    layer: '向内收拢的螺旋：思绪反复绕回同一件事',
+    outer: '外圈螺旋：反复思虑循环',
+    center: '中心收拢：注意力持续收窄',
+  },
+  conflict: {
+    layer: '交织双带：难过与愤懑互相拉扯',
+    outer: '外圈双带：两种情绪互相缠绕',
+    center: '中心：对抗最紧的焦点',
+  },
+  numbness: { layer: '封闭的团块：感受暂时被隔绝在外' },
+  excited: { layer: '上升的光尘：雀跃的心情正在上扬' },
+  calm: { layer: '舒展的波纹：松弛正在向外扩散' },
+};
+
+export function layerMetaphor(cat: string, zone: ClickZone = 'layer'): string {
+  const m = (LAYER_METAPHOR as Record<string, { layer: string; outer?: string; center?: string } | undefined>)[cat]
+    ?? { layer: '这一层保留了你当时的图形参数' };
+  if (zone === 'outer' && m.outer) return m.outer;
+  if (zone === 'center' && m.center) return m.center;
+  return m.layer;
+}
+
+/** 觉察引导问句（与图形类型绑定；非说教、不给答案、不要求回答） */
+export const AWARENESS_PROMPTS: Record<EmotionCategory, string[]> = {
+  rumination: ['是什么想法，让你反复回到这里？', '这个想法是事实，还是脑海里的猜测？'],
+  'diffuse-low': ['这种沉重感，在身体的哪个位置？', '它是从什么时候开始弥漫的？'],
+  conflict: ['这两种感受，哪一个更早出现？', '它们各自想保护你什么？'],
+  numbness: ['是什么让你想要关上感受、保护自己？', '封闭的外壳之下，还有什么在等待？'],
+  excited: ['是什么让这份雀跃升起来的？', '这份心情，你最想和谁分享？'],
+  calm: ['是什么让你慢慢松下来？', '此刻的身体是什么感觉？'],
+};
+
+export function awarenessPrompts(cat: string): string[] {
+  return (AWARENESS_PROMPTS as Record<string, string[]>)[cat] ?? ['此刻的你，注意到了什么？'];
+}
+
+/** 情绪流动注解（时序隐喻：情绪是动态过程，不是固定标签） */
+export const FLOW_NOTE: Record<EmotionCategory, string> = {
+  rumination: '下行螺旋：情绪正在自我强化，越回想越沉重',
+  'diffuse-low': '弥散消耗：没有明确的循环，但持续消耗',
+  conflict: '对抗拉扯：两股情绪互相消耗，持续紧绷',
+  numbness: '封闭停滞：感受暂时冻结',
+  excited: '上行轻盈：情绪正在上扬、有活力',
+  calm: '上行舒展：情绪正在拓宽、松动',
+};
+
+export function flowNote(cat: string): string {
+  return (FLOW_NOTE as Record<string, string>)[cat] ?? '情绪是一个动态过程';
+}
+
+/** 中性变化提示上下文（只做形态对比描述，不做好坏评判） */
+export interface TransitionContext {
+  primary: string;
+  intensity: IntensityLevel;
+}
+
+/**
+ * 本次图形与上一条图形的中性变化描述。
+ * 同类别：按强度变化描述；跨类别：查固定模板表；无匹配：通用中性描述。
+ */
+export function buildTransitionHint(prev: TransitionContext, curr: TransitionContext): string {
+  const IDX: Record<IntensityLevel, number> = { light: 0, medium: 1, heavy: 2 };
+  if (prev.primary === curr.primary) {
+    const d = IDX[curr.intensity] - IDX[prev.intensity];
+    const sameTable: Record<string, [string, string, string]> = {
+      rumination: ['思虑循环仍在持续', '思虑的循环比上次更收紧', '相比上一次，你的循环在松动'],
+      'diffuse-low': ['低落仍在弥散', '云雾比上次更沉了一些', '云雾比上次薄了一些'],
+      conflict: ['拉扯仍在持续', '拉扯的张力比上次更紧', '拉扯的张力缓和了些'],
+      numbness: ['感受仍处于封闭状态', '封闭感比上次更深', '封闭的外壳出现一点松动'],
+      excited: ['状态依然上扬', '上扬的能量比上次更满', '上扬的能量回落了些'],
+      calm: ['平静依旧', '波纹比上次更舒展', '波纹收敛了些'],
+    };
+    const row = (sameTable as Record<string, [string, string, string] | undefined>)[prev.primary];
+    // [持平, 加重, 减轻]：d>0 → 加重，d<0 → 减轻，d=0 → 持平（强度差范围 ±2，不可直接用 d+1 索引）
+    const ti = d > 0 ? 1 : d < 0 ? 2 : 0;
+    return row ? row[ti] : '情绪形态与上次一致';
+  }
+  const crossTable: Record<string, string> = {
+    'numbness->diffuse-low': '封闭的感受下，低落开始浮现',
+    'calm->rumination': '松弛的状态重新卷入思虑循环',
+    'calm->diffuse-low': '平静的水面泛起了阴霾',
+    'diffuse-low->rumination': '弥散的低落收拢成了具体的循环',
+    'rumination->diffuse-low': '收紧的循环散开了一些',
+    'rumination->numbness': '思虑停了下来，感受进入封闭',
+    'conflict->rumination': '拉扯的对抗沉淀为反复思虑',
+    'rumination->conflict': '思虑里长出了对抗的张力',
+    'excited->calm': '上扬的能量缓缓落回平静',
+    'calm->excited': '平静里升起雀跃的能量',
+    'diffuse-low->calm': '云雾散去，水面渐平',
+    'numbness->rumination': '封闭之下，思绪开始活动',
+    'conflict->diffuse-low': '对抗的火气沉淀为低落',
+    'diffuse-low->conflict': '低落里升起了不甘',
+    'calm->conflict': '平静被拉扯打破',
+    'numbness->calm': '封闭的外壳打开了一扇窗',
+    'excited->diffuse-low': '上扬的能量落了下来',
+    'diffuse-low->excited': '低落里透出了一点光',
+    'rumination->calm': '循环终于慢了下来',
+    'conflict->calm': '拉扯归于平缓',
+    'calm->numbness': '平静转向了封闭',
+    'excited->rumination': '上扬的能量卷入了思虑',
+    'rumination->excited': '思虑松开，能量升了起来',
+    'conflict->excited': '拉扯解开，能量升了起来',
+    'numbness->excited': '封闭中透出了活力',
+    'excited->numbness': '上扬的能量静止了下来',
+    'conflict->numbness': '拉扯停下，感受进入封闭',
+    'diffuse-low->numbness': '低落沉入封闭',
+    'excited->conflict': '上扬的能量卷入拉扯',
+  };
+  return crossTable[`${prev.primary}->${curr.primary}`] ?? '情绪形态发生了变化';
+}
+
 /**
  * 安全读取类别规则：历史记录可能携带已废弃的类别 key（v1.0/v1.1 的 anger/panic/oppression/isolation），
  * 直接下标访问会得到 undefined。旧记录不重绘、只降级展示文案。
@@ -396,5 +548,12 @@ export function buildRulesExport() {
     timingRule: '单轮动画周期 3~6s，低帧率低刺激，拒绝快节奏与频闪',
     versioningRule: '每条图形记录绑定 rulesVersion 与完整渲染参数；规则迭代不回溯重绘历史图形',
     renderingRule: 'SVG 矢量参数驱动渲染，禁止 AI 绘画随机生成',
+    crisisRule: `输入命中高危信号词（${CRISIS_KEYWORDS.join('、')}等）直接阻断图形生成，微调面板与交互全部不触发，仅提供支持信息`,
+    manualOverrideRule: '识别结果先预览、可手动微调（主情绪/强度/次要情绪开关）；手动修改后图形绑定用户参数并标记来源=人工调整',
+    metadataTagsRule: '触发类型与躯体感受为可选附加元数据，不参与形态判定；躯体感受仅在解读文案中温和引用',
+    awarenessRule: '觉察引导问句与图形类型绑定，非说教、不给答案、不要求回答',
+    interactionRule: '按住图形产生临时形变（呼吸调节体验），不修改记录的原始图形参数，松开恢复',
+    transitionRule: '与上一条记录的对比只做中性形态描述，不做好坏评判',
+    softModeDowngrade: '柔和模式：隐藏拉扯尖角形态（冲突降级为普通反刍螺旋）、形变幅度减半、动画锁定最慢档',
   };
 }
